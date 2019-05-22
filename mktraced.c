@@ -9,11 +9,15 @@
 #include <linux/sched.h>
 #include <linux/sys.h>
 #include <linux/io.h>
+#include <linux/version.h>
 #include <linux/kallsyms.h>
 
 #define CRO_WP 0x00010000
 #define DEVICE_NAME "cl_sf"
 #define CLASS_NAME  "cl"
+
+MODULE_AUTHOR("Conghao Liu <cliu115@hawk.iit.edu>");
+MODULE_DESCRIPTION("Syscall proxy daemon");
 
 #define syscall_wrapper(syscall_number, old_call)   \
 ({                                                  \
@@ -470,6 +474,12 @@ static unsigned long** find_syscall_table(void)
     unsigned long ptr;
     unsigned long *p;
 
+#if defined(CONFIG_X86_64) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0))
+    unsigned long ret = kallsyms_lookup_name("syscall_table");
+    printk("Found syscall table at %p\n", (void*)ret);
+    return ret;
+#else 
+
     for (ptr = (unsigned long) sys_close;
             ptr < (unsigned long) &loops_per_jiffy;
             ptr += sizeof(void*)){
@@ -483,6 +493,7 @@ static unsigned long** find_syscall_table(void)
     }
     printk("syscall table not found");
     return NULL;
+#endif
 }
 static int worker(void* data){
     printk("worker launched\n");
@@ -1301,6 +1312,10 @@ static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, lof
     }
     return len;
 }
+
+#ifndef CONFIG_X86_64
+#error "Architectures other than x86_64 not currently supported"
+#endif
 
 module_init(cl_km_init);
 module_exit(cl_km_exit);

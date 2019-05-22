@@ -1,16 +1,27 @@
-obj-m += sf_sim.o
+CC:=gcc
+MCFLAGS:= -Wall -O2
 
-all: tracer
-	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
+obj-m+=mktraced.o
 
-clean:
-	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
+all: mktraced.ko mktrace
 
-tracer:
-	gcc -o tracer.o tracer.c
+mktrace: mktrace.c
+	$(CC) $(MCFLAGS) -o $@ $<
 
-ins:
-	sudo insmod sf_sim.ko
+mktraced.ko: mktraced.c
+	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
+
+ins: mktraced.ko
+	@sudo insmod mktraced.ko
 
 rm:
-	sudo rmmod sf_sim
+	@sudo rmmod mktraced
+
+install:
+	@sudo cp mktrace /usr/bin/
+
+clean:
+	@rm -f *.o *.ko mktrace
+	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
+
+.PHONY: clean ins rm install
