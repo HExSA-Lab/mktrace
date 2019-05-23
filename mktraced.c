@@ -11,6 +11,9 @@
 #include <linux/io.h>
 #include <linux/version.h>
 #include <linux/kallsyms.h>
+#include <asm/tlbflush.h>
+
+extern const unsigned long kallsyms_relative_base;
 
 #include "bitnum.h"
 
@@ -225,7 +228,7 @@ static struct device* clcharDevice = NULL;
 static int (*fixed_set_memory_rw)(unsigned long, int);
 static int (*fixed_set_memory_ro)(unsigned long, int);
 
-static ssize_t dev_write(struct file*, const char*, size_t, loff_t*);
+static ssize_t dev_write(struct file*, const char *, size_t, loff_t*);
 static struct file_operations fops = {
     .write = dev_write,
 };
@@ -348,14 +351,15 @@ static struct task_struct* worker_id;
 
 static unsigned long** find_syscall_table(void)
 {
+#if defined(CONFIG_X86_64) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0))
+    //unsigned long sys_close = kallsyms_lookup_name("__x64_sys_close");
+    return kallsyms_lookup_name("sys_call_table");
+#else
+
     unsigned long ptr;
     unsigned long *p;
 
-#if defined(CONFIG_X86_64) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0))
-    unsigned long ret = kallsyms_lookup_name("syscall_table");
-    printk("Found syscall table at %p\n", (void*)ret);
-    return ret;
-#else 
+    printk(KERN_INFO "sys_close is at %p\n", (void*)sys_close);
 
     for (ptr = (unsigned long) sys_close;
             ptr < (unsigned long) &loops_per_jiffy;
@@ -364,14 +368,16 @@ static unsigned long** find_syscall_table(void)
         p = (unsigned long*) ptr;
 
         if(p[__NR_close] == (unsigned long) sys_close){
-            printk("found syscall table");
+            printk(KERN_INFO "found syscall table\n");
             return (unsigned long**) p;
         }
     }
-    printk("syscall table not found");
+
+    printk(KERN_ERR "syscall table not found\n");
     return NULL;
 #endif
 }
+
 static int worker(void* data){
     printk("worker launched\n");
     while(1)
@@ -616,6 +622,7 @@ static int my_brk(void* addr)
     return result;
       */
 
+    printk(KERN_INFO "my_brk invoked\n");
     syscall_wrapper(__NR_brk, old_brk(addr));
 }
 
@@ -836,58 +843,20 @@ static long my_readlink(const char __user *path, char __user *buf, int bufsiz)
 //
 static void replace_table(unsigned long syslist)
 {
-    /*
-    old_brk           = syscall_table[__NR_brk];
-    old_chdir         = syscall_table[__NR_chdir];
-    old_chmod         = syscall_table[__NR_chmod];
-    old_clock_gettime = syscall_table[__NR_clock_gettime];
-    old_close         = syscall_table[__NR_close];
-    old_dup           = syscall_table[__NR_dup];
-    old_dup2          = syscall_table[__NR_dup2];
-    //old_execve        = syscall_table[__NR_execve];
-    old_faccessat     = syscall_table[__NR_faccessat];
-    old_fchmod        = syscall_table[__NR_fchmod];
-    old_fchown        = syscall_table[__NR_fchown];
-    old_fstat         = syscall_table[__NR_fstat];
-    //old_futex         = syscall_table[__NR_futex];
-    old_getcwd        = syscall_table[__NR_getcwd];
-    old_getdents64    = syscall_table[__NR_getdents64];
-    old_getgid        = syscall_table[__NR_getgid];
-    old_getpid        = syscall_table[__NR_getpid];
-    old_getppid       = syscall_table[__NR_getppid];
-    old_ioctl         = syscall_table[__NR_ioctl];
-    //old_kill          = syscall_table[__NR_kill];
-    old_lseek         = syscall_table[__NR_lseek];
-    old_lstat         = syscall_table[__NR_lstat];
-    old_mkdir         = syscall_table[__NR_mkdir];
-    //old_mmap          = syscall_table[__NR_mmap];
-    old_write         = syscall_table[__NR_write];
-    old_mprotect      = syscall_table[__NR_mprotect];
-    old_read          = syscall_table[__NR_read];
-    old_sysinfo       = syscall_table[__NR_sysinfo];
-    old_sendto        = syscall_table[__NR_sendto];
-    old_socket        = syscall_table[__NR_socket];
-    old_unlink        = syscall_table[__NR_unlink];
-    //old_wait4         = syscall_table[__NR_wait4];
-    old_utime         = syscall_table[__NR_utime];
-    old_umask         = syscall_table[__NR_umask];
-    old_uname         = syscall_table[__NR_uname];
-    old_stat          = syscall_table[__NR_stat];
-    //old_nanosleep     = syscall_table[__NR_nanosleep];
-    old_setpgid       = syscall_table[__NR_setpgid];
-    old_readlink      = syscall_table[__NR_readlink];
-    */
-
-        if (syscall_table != NULL){
+    if (syscall_table != NULL){
         int ret;
         unsigned long addr;
         unsigned long old_cr0;
         old_cr0 = read_cr0();
 
+        printk(KERN_INFO "disabling write protection\n");
         write_cr0(old_cr0 & ~CRO_WP);
         addr = (unsigned long) syscall_table;
-        ret = fixed_set_memory_rw(PAGE_ALIGN(addr) - PAGE_SIZE, 1);
-        write_cr3(virt_to_phys(current->mm->pgd));
+        printk(KERN_INFO "making syscall table rw\n");
+        //ret = fixed_set_memory_rw(PAGE_ALIGN(addr) - PAGE_SIZE, 1);
+        ret = fixed_set_memory_rw(addr, 1);
+        printk(KERN_INFO "flushing TLB\n");
+        __flush_tlb_all();
 
         if (ret)
         {
@@ -895,7 +864,11 @@ static void replace_table(unsigned long syslist)
             return ;
         }
 
+        printk(KERN_INFO "Modifying syscall table based on bitmap\n");
+
         SET_TBL_ENT(brk);
+        //old_brk = syscall_table[__NR_brk];
+        //syscall_table[__NR_brk] = my_brk;
         SET_TBL_ENT(chdir);
         SET_TBL_ENT(chmod);
         SET_TBL_ENT(clock_gettime);
@@ -929,13 +902,13 @@ static void replace_table(unsigned long syslist)
         SET_TBL_ENT(setpgid);
         SET_TBL_ENT(readlink);
         /*
-        syscall_table[__NR_brk]           = my_brk;
-        syscall_table[__NR_chdir]         = my_chdir;
-        syscall_table[__NR_chmod]         = my_chmod;
-        syscall_table[__NR_clock_gettime] = my_clock_gettime;
-        syscall_table[__NR_close]         = my_close;
-        syscall_table[__NR_dup]           = my_dup;
-        syscall_table[__NR_dup2]          = my_dup2;
+           syscall_table[__NR_brk]           = my_brk;
+           syscall_table[__NR_chdir]         = my_chdir;
+           syscall_table[__NR_chmod]         = my_chmod;
+           syscall_table[__NR_clock_gettime] = my_clock_gettime;
+           syscall_table[__NR_close]         = my_close;
+           syscall_table[__NR_dup]           = my_dup;
+           syscall_table[__NR_dup2]          = my_dup2;
         //syscall_table[__NR_execve]        = my_execve;
         syscall_table[__NR_faccessat]     = my_faccessat;
         syscall_table[__NR_fchmod]        = my_fchmod;
@@ -969,16 +942,19 @@ static void replace_table(unsigned long syslist)
         syscall_table[__NR_setpgid]       = my_setpgid;
         syscall_table[__NR_readlink]      = my_readlink;
         */
-    
 
-        write_cr0(old_cr0);
-        ret = fixed_set_memory_ro(PAGE_ALIGN(addr) - PAGE_SIZE, 1);
-        write_cr3(virt_to_phys(current->mm->pgd));
+        //printk(KERN_INFO "restoring Cr0\n");
+
+        //write_cr0(old_cr0);
+        //printk(KERN_INFO "restoring syscall table permissions\n");
+        //ret = fixed_set_memory_ro(addr, 1);
+        //printk(KERN_INFO "flusing TLB again\n");
+        //__flush_tlb_all();
+    } else {
+        printk(KERN_ERR "replace_table cannot find the location of syscall_table\n");
     }
-    else
-    {
-        printk(KERN_INFO "replace_table cannot find the location of syscall_table\n");
-    }
+
+    printk(KERN_INFO "done replacing syscall table\n");
 }
 
 
@@ -994,7 +970,8 @@ static int restore_syscall_table(unsigned long syslist)
 
         write_cr0(read_cr0() & ~CRO_WP);
         addr = (unsigned long) syscall_table;
-        ret = fixed_set_memory_rw(PAGE_ALIGN(addr) - PAGE_SIZE, 1);
+        //ret = fixed_set_memory_rw(PAGE_ALIGN(addr) - PAGE_SIZE, 1);
+        ret = fixed_set_memory_rw(addr, 1);
         //printk(KERN_INFO "after write_cr0\n");
 
         if (ret)
@@ -1037,57 +1014,14 @@ static int restore_syscall_table(unsigned long syslist)
         RESET_TBL_ENT(stat);
         RESET_TBL_ENT(setpgid);
         RESET_TBL_ENT(readlink);
- 
 
         printk(KERN_INFO "restored syscall_table\n");
-
-
-        /*
-        syscall_table[__NR_brk]           = old_brk;
-        syscall_table[__NR_chdir]         = old_chdir;
-        syscall_table[__NR_chmod]         = old_chmod;
-        syscall_table[__NR_clock_gettime] = old_clock_gettime;
-        syscall_table[__NR_close]         = old_close;
-        syscall_table[__NR_dup]           = old_dup;
-        syscall_table[__NR_dup2]          = old_dup2;
-        //syscall_table[__NR_execve]        = old_execve;
-        syscall_table[__NR_faccessat]     = old_faccessat;
-        syscall_table[__NR_fchmod]        = old_fchmod;
-        syscall_table[__NR_fchown]        = old_fchown;
-        syscall_table[__NR_fstat]         = old_fstat;
-        //syscall_table[__NR_futex]         = old_futex;
-        syscall_table[__NR_getcwd]        = old_getcwd;
-        syscall_table[__NR_getdents64]    = old_getdents64;
-        syscall_table[__NR_getgid]        = old_getgid;
-        syscall_table[__NR_getpid]        = old_getpid;
-        syscall_table[__NR_getppid]       = old_getppid;
-        syscall_table[__NR_ioctl]         = old_ioctl;
-        syscall_table[__NR_lseek]         = old_lseek;
-        //syscall_table[__NR_kill]          = old_kill;
-        syscall_table[__NR_lstat]         = old_lstat;
-        syscall_table[__NR_mkdir]         = old_mkdir;
-        //syscall_table[__NR_mmap]          = old_mmap;
-        syscall_table[__NR_write]         = old_write;
-        syscall_table[__NR_mprotect]      = old_mprotect;
-        syscall_table[__NR_read]          = old_read;
-        syscall_table[__NR_sysinfo]       = old_sysinfo;
-        syscall_table[__NR_sendto]        = old_sendto;
-        syscall_table[__NR_socket]        = old_socket;
-        syscall_table[__NR_unlink]        = old_unlink;
-        //syscall_table[__NR_wait4]         = old_wait4;
-        syscall_table[__NR_utime]         = old_utime;
-        syscall_table[__NR_umask]         = old_umask;
-        syscall_table[__NR_uname]         = old_uname;
-        syscall_table[__NR_stat]          = old_stat;
-        //syscall_table[__NR_nanosleep]     = old_nanosleep;
-        syscall_table[__NR_setpgid]       = old_setpgid; 
-        syscall_table[__NR_readlink]      = old_readlink;
-        */
 
         write_cr0(read_cr0() | CRO_WP);
 
         addr = (unsigned long) syscall_table;
-        ret = fixed_set_memory_ro(PAGE_ALIGN(addr) - PAGE_SIZE, 1);
+        //ret = fixed_set_memory_ro(PAGE_ALIGN(addr) - PAGE_SIZE, 1);
+        //ret = fixed_set_memory_ro(addr, 1);
         //printk(KERN_INFO "sys_brk was restored\n");
     }
 
@@ -1103,25 +1037,27 @@ static int init_syscall_table(void)
 
     printk(KERN_INFO "start to find syscall addr\n");
     syscall_table = (void**) find_syscall_table();
+
+    if (syscall_table == NULL) {
+        printk(KERN_ERR "Could not find syscall table\n");
+    }
+
     printk(KERN_INFO "start to replace syscall addr\n");
 
     fixed_set_memory_rw = (void *) kallsyms_lookup_name("set_memory_rw");
     if (!fixed_set_memory_rw)
     {
-        printk(KERN_INFO "unable to find set_memory_rw symbol\n");
+        printk(KERN_ERR "unable to find set_memory_rw symbol\n");
         //return ;
     }
 
     fixed_set_memory_ro = (void *) kallsyms_lookup_name("set_memory_ro");
     if (!fixed_set_memory_ro)
     {
-        printk(KERN_INFO "unable to find set_memory_ro symbol\n");
+        printk(KERN_ERR "unable to find set_memory_ro symbol\n");
         //return ;
     }
 
-
-
-    //replace_table();
     syscall_task.status = 1;
     last_syslist = 0;
 
@@ -1249,24 +1185,38 @@ static void __exit cl_km_exit(void)
  * [PID] (4 bytes)
  * [SYSBITMAP] (8 bytes)
  */
-static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset){
+static ssize_t dev_write(struct file *filep, const char * buffer, size_t len, loff_t *offset){
+    char buf[12];
+    printk(KERN_INFO "dev_write called\n");
     pid_t pid;
-    pid = *(pid_t*)buffer;
-    unsigned long syslist = *(unsigned long*)(buffer + sizeof(pid_t));
+    copy_from_user(buf, buffer, 12);
+    printk(KERN_INFO "about to access buffer\n");
+    pid = *(pid_t*)buf;
+    unsigned long syslist = *(unsigned long*)(buf + sizeof(pid_t));
 
 
-    //printk(KERN_INFO "result = %ld  pid = %ld\n", result, pid);
-    //printk("input str:%s\n", buffer);
+    printk(KERN_INFO "pid = %d\n", pid);
+    printk(KERN_INFO "syscall bitmap = 0x%lx\n", syslist);
+
     if (pid >= 0){
         //replace syscall_table 
         restore_syscall_table(last_syslist);
         replace_table(syslist);
+        printk(KERN_INFO "replacing last syslist\n");
         last_syslist = syslist;
 
+        printk(KERN_INFO "setting targetPid\n");
         targetPid = pid;
+        printk(KERN_INFO "setting pid flag\n");
         pidFlag = 1;
         printk(KERN_INFO "CL: pid %d received\n", pid);
+    } else {
+        printk(KERN_ERR "Bad PID given (%d)\n", pid);
+        return -1;
     }
+
+    printk(KERN_INFO "dev_write complete\n");
+
     return len;
 }
 
