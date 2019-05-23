@@ -36,12 +36,16 @@ static int get_syslist (unsigned long * slist)
     size_t lineMaxLen;
     ssize_t lineLen;
 
+    if (!slist) {
+        ERROR("No system call bitmap provided\n");
+        return -1;
+    }
+
     lineBuf = (char*) malloc(LINE_BUF_SIZE);
     bzero(lineBuf, LINE_BUF_SIZE);
 
     lineMaxLen = LINE_BUF_SIZE;
     lineLen = 0;
-    slist = 0;
 
     // open mktrace profile
     fp = fopen(PF_NAME, "r");
@@ -232,7 +236,7 @@ int main(int argc, char** argv)
     }
 
     if (access(argv[1], F_OK) != 0){
-        ERROR("executable %s does not exist", argv[1]);
+        ERROR("executable %s does not exist (please provide full path)\n", argv[1]);
         exit(EXIT_FAILURE);
     }
 
