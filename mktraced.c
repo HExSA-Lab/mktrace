@@ -12,12 +12,16 @@
 #include <linux/version.h>
 #include <linux/kallsyms.h>
 
+#include "bitnum.h"
+
 #define CRO_WP 0x00010000
 #define DEVICE_NAME "cl_sf"
 #define CLASS_NAME  "cl"
 
 MODULE_AUTHOR("Conghao Liu <cliu115@hawk.iit.edu>");
 MODULE_DESCRIPTION("Syscall proxy daemon");
+MODULE_LICENSE("GPL");
+MODULE_VERSION("0,1");
 
 #define syscall_wrapper(syscall_number, old_call)   \
 ({                                                  \
@@ -188,152 +192,23 @@ MODULE_DESCRIPTION("Syscall proxy daemon");
     HANDLE_BOT;\
 })
 
+#define SET_TBL_ENT(sysname)\
+({\
+    if ((syslist & __BN_##sysname) > 0){\
+        old_##sysname = syscall_table[__NR_##sysname];\
+        syscall_table[__NR_##sysname] = my_##sysname;\
+    }\
+})
 
-
-/*
-#define HANDLE_CALL0(CALL_NAME)\
-    struct mm_struct* old_mm;\
-    struct mm_struct* old_active_mm;\
-    struct files_struct* old_files;\
-    old_mm = current->mm;\
-    old_active_mm = current->active_mm;\
-    old_files = current->files;\
-    current->mm = syscall_task.mm;\
-    current->active_mm = syscall_task.active_mm;\
-    current->files = syscall_task.files;\
-    syscall_task.ret = (*CALL_NAME)(void);\
-    syscall_task.status = 1;\
-    current->mm = old_mm;\
-    current->active_mm = old_active_mm;\
-    current->files = old_files;\
-    break;
-
-#define HANDLE_CALL1(CALL_NAME, AT1)\
-    struct mm_struct* old_mm;\
-    struct mm_struct* old_active_mm;\
-    struct files_struct* old_files;\
-    old_mm = current->mm;\
-    old_active_mm = current->active_mm;\
-    old_files = current->files;\
-    current->mm = syscall_task.mm;\
-    current->active_mm = syscall_task.active_mm;\
-    current->files = syscall_task.files;\
-    syscall_task.ret = (*CALL_NAME)((AT1)syscall_task.arg1);\
-    syscall_task.status = 1;\
-    current->mm = old_mm;\
-    current->active_mm = old_active_mm;\
-    current->files = old_files;\
-    break;
-
-#define HANDLE_CALL2(CALL_NAME, AT1, AT2)\
-    struct mm_struct* old_mm;\
-    struct mm_struct* old_active_mm;\
-    struct files_struct* old_files;\
-    old_mm = current->mm;\
-    old_active_mm = current->active_mm;\
-    old_files = current->files;\
-    current->mm = syscall_task.mm;\
-    current->active_mm = syscall_task.active_mm;\
-    current->files = syscall_task.files;\
-    syscall_task.ret = (*CALL_NAME)((AT1)syscall_task.arg1,\
-                                    (AT2)syscall_task.arg2);\
-    syscall_task.status = 1;\
-    current->mm = old_mm;\
-    current->active_mm = old_active_mm;\
-    current->files = old_files;\
-    break;
-
-#define HANDLE_CALL3(CALL_NAME, AT1, AT2, AT3)\
-    struct mm_struct* old_mm;\
-    struct mm_struct* old_active_mm;\
-    struct files_struct* old_files;\
-    old_mm = current->mm;\
-    old_active_mm = current->active_mm;\
-    old_files = current->files;\
-    current->mm = syscall_task.mm;\
-    current->active_mm = syscall_task.active_mm;\
-    current->files = syscall_task.files;\
-    syscall_task.ret = (*CALL_NAME)((AT1)syscall_task.arg1,\
-                                    (AT2)syscall_task.arg2,\
-                                    (AT3)syscall_task.arg3);\
-    syscall_task.status = 1;\
-    current->mm = old_mm;\
-    current->active_mm = old_active_mm;\
-    current->files = old_files;\
-    break;
-
-#define HANDLE_CALL4(CALL_NAME, AT1, AT2, AT3, AT4)\
-    struct mm_struct* old_mm;\
-    struct mm_struct* old_active_mm;\
-    struct files_struct* old_files;\
-    old_mm = current->mm;\
-    old_active_mm = current->active_mm;\
-    old_files = current->files;\
-    current->mm = syscall_task.mm;\
-    current->active_mm = syscall_task.active_mm;\
-    current->files = syscall_task.files;\
-    syscall_task.ret = (*CALL_NAME)((AT1)syscall_task.arg1,\
-                                    (AT2)syscall_task.arg2,\
-                                    (AT3)syscall_task.arg3,\
-                                    (AT4)syscall_task.arg4);\
-    syscall_task.status = 1;\
-    current->mm = old_mm;\
-    current->active_mm = old_active_mm;\
-    current->files = old_files;\
-    break;
-
-#define HANDLE_CALL5(CALL_NAME, AT1, AT2, AT3, AT4, AT5)\
-    struct mm_struct* old_mm;\
-    struct mm_struct* old_active_mm;\
-    struct files_struct* old_files;\
-    old_mm = current->mm;\
-    old_active_mm = current->active_mm;\
-    old_files = current->files;\
-    current->mm = syscall_task.mm;\
-    current->active_mm = syscall_task.active_mm;\
-    current->files = syscall_task.files;\
-    syscall_task.ret = (*CALL_NAME)((AT1)syscall_task.arg1,\
-                                    (AT2)syscall_task.arg2,\
-                                    (AT3)syscall_task.arg3,\
-                                    (AT4)syscall_task.arg4,\
-                                    (AT5)syscall_task.arg5);\
-    syscall_task.status = 1;\
-    current->mm = old_mm;\
-    current->active_mm = old_active_mm;\
-    current->files = old_files;\
-    break;
-
-#define HANDLE_CALL6(CALL_NAME, AT1, AT2, AT3, AT4, AT5, AT6)\
-    struct mm_struct* old_mm;\
-    struct mm_struct* old_active_mm;\
-    struct files_struct* old_files;\
-    old_mm = current->mm;\
-    old_active_mm = current->active_mm;\
-    old_files = current->files;\
-    current->mm = syscall_task.mm;\
-    current->active_mm = syscall_task.active_mm;\
-    current->files = syscall_task.files;\
-    syscall_task.ret = (*CALL_NAME)((AT1)syscall_task.arg1,\
-                                    (AT2)syscall_task.arg2,\
-                                    (AT3)syscall_task.arg3,\
-                                    (AT4)syscall_task.arg4,\
-                                    (AT5)syscall_task.arg5,\
-                                    (AT6)syscall_task.arg6);\
-    syscall_task.status = 1;\
-    current->mm = old_mm;\
-    current->active_mm = old_active_mm;\
-    current->files = old_files;\
-    break;
-
-*/
-
+#define RESET_TBL_ENT(sysname)\
+({\
+    if ((syslist & __BN_##sysname) > 0){\
+        syscall_table[__NR_##sysname] = old_##sysname;\
+    }\
+})
 
 static struct task_struct* task;
 
-MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Conghao Liu");
-MODULE_DESCRIPTION("syscall forwarding simulation");
-MODULE_VERSION("0,1");
 
 //static void* shadow_table[600];    //not sure the length of the actual syscall_table
 //this contains the replaced syscall entry
@@ -341,12 +216,14 @@ MODULE_VERSION("0,1");
 static int            majorNumber;
 static pid_t          targetPid;
 static int            pidFlag;              //0:pid unset 1:pid set
+static unsigned long  last_syslist;         //everytime dev_write is invoked, 
+                                            //syscall_table needs to be 
+                                            //restored based on this value
 static struct class*  clcharClass  = NULL;
 static struct device* clcharDevice = NULL;
 
 static int (*fixed_set_memory_rw)(unsigned long, int);
 static int (*fixed_set_memory_ro)(unsigned long, int);
-static unsigned long (*iopa_ptr)(unsigned long);
 
 static ssize_t dev_write(struct file*, const char*, size_t, loff_t*);
 static struct file_operations fops = {
@@ -957,18 +834,9 @@ static long my_readlink(const char __user *path, char __user *buf, int bufsiz)
 //this function store the replaced syscall entry into shadow_table
 //and replace the syscall_table with our wrapping functions
 //
-static void replace_table(void)
+static void replace_table(unsigned long syslist)
 {
-
-    /* 
-       shadow_table[__NR_chdir] = syscall_table[__NR_chdir];
-       syscall_table[__NR_chdir] = my_chdir;
-
-       shadow_table[__NR_chmod] = syscall_table[__NR_chmod];
-       syscall_table[__NR_chmod] = my_chmod;
-       */
-
-
+    /*
     old_brk           = syscall_table[__NR_brk];
     old_chdir         = syscall_table[__NR_chdir];
     old_chmod         = syscall_table[__NR_chmod];
@@ -1008,24 +876,9 @@ static void replace_table(void)
     //old_nanosleep     = syscall_table[__NR_nanosleep];
     old_setpgid       = syscall_table[__NR_setpgid];
     old_readlink      = syscall_table[__NR_readlink];
-    /*
     */
 
-    fixed_set_memory_rw = (void *) kallsyms_lookup_name("set_memory_rw");
-    if (!fixed_set_memory_rw)
-    {
-        printk(KERN_INFO "unable to find set_memory_rw symbol\n");
-        return ;
-    }
-
-    fixed_set_memory_ro = (void *) kallsyms_lookup_name("set_memory_ro");
-    if (!fixed_set_memory_ro)
-    {
-        printk(KERN_INFO "unable to find set_memory_ro symbol\n");
-        return ;
-    }
-
-    if (syscall_table != NULL){
+        if (syscall_table != NULL){
         int ret;
         unsigned long addr;
         unsigned long old_cr0;
@@ -1042,6 +895,40 @@ static void replace_table(void)
             return ;
         }
 
+        SET_TBL_ENT(brk);
+        SET_TBL_ENT(chdir);
+        SET_TBL_ENT(chmod);
+        SET_TBL_ENT(clock_gettime);
+        SET_TBL_ENT(close);
+        SET_TBL_ENT(dup);
+        SET_TBL_ENT(dup2);
+        SET_TBL_ENT(faccessat);
+        SET_TBL_ENT(fchmod);
+        SET_TBL_ENT(fchown);
+        SET_TBL_ENT(fstat);
+        SET_TBL_ENT(getcwd);
+        SET_TBL_ENT(getdents64);
+        SET_TBL_ENT(getgid);
+        SET_TBL_ENT(getpid);
+        SET_TBL_ENT(getppid);
+        SET_TBL_ENT(ioctl);
+        SET_TBL_ENT(lseek);
+        SET_TBL_ENT(lstat);
+        SET_TBL_ENT(mkdir);
+        SET_TBL_ENT(write);
+        SET_TBL_ENT(mprotect);
+        SET_TBL_ENT(read);
+        SET_TBL_ENT(sysinfo);
+        SET_TBL_ENT(sendto);
+        SET_TBL_ENT(socket);
+        SET_TBL_ENT(unlink);
+        SET_TBL_ENT(utime);
+        SET_TBL_ENT(umask);
+        SET_TBL_ENT(uname);
+        SET_TBL_ENT(stat);
+        SET_TBL_ENT(setpgid);
+        SET_TBL_ENT(readlink);
+        /*
         syscall_table[__NR_brk]           = my_brk;
         syscall_table[__NR_chdir]         = my_chdir;
         syscall_table[__NR_chmod]         = my_chmod;
@@ -1081,7 +968,6 @@ static void replace_table(void)
         //syscall_table[__NR_nanosleep]     = my_nanosleep;
         syscall_table[__NR_setpgid]       = my_setpgid;
         syscall_table[__NR_readlink]      = my_readlink;
-        /*
         */
     
 
@@ -1096,18 +982,20 @@ static void replace_table(void)
 }
 
 
-static int exit_syscall_table(void)
+static int restore_syscall_table(unsigned long syslist)
 {
-    //syscall_table[__NR_brk] = old_brk
-
+    //printk(KERN_INFO "restore_syscall_table called\n");
     if (syscall_table != NULL)
     {
         int ret;
         unsigned long addr;
 
+        //printk(KERN_INFO "before write_cr0\n");
+
         write_cr0(read_cr0() & ~CRO_WP);
         addr = (unsigned long) syscall_table;
         ret = fixed_set_memory_rw(PAGE_ALIGN(addr) - PAGE_SIZE, 1);
+        //printk(KERN_INFO "after write_cr0\n");
 
         if (ret)
         {
@@ -1115,6 +1003,46 @@ static int exit_syscall_table(void)
             return 1;
         }
 
+        printk(KERN_INFO "trying to restore syscall_table\n");
+        RESET_TBL_ENT(brk);
+        RESET_TBL_ENT(chdir);
+        RESET_TBL_ENT(chmod);
+        RESET_TBL_ENT(clock_gettime);
+        RESET_TBL_ENT(close);
+        RESET_TBL_ENT(dup);
+        RESET_TBL_ENT(dup2);
+        RESET_TBL_ENT(faccessat);
+        RESET_TBL_ENT(fchmod);
+        RESET_TBL_ENT(fchown);
+        RESET_TBL_ENT(fstat);
+        RESET_TBL_ENT(getcwd);
+        RESET_TBL_ENT(getdents64);
+        RESET_TBL_ENT(getgid);
+        RESET_TBL_ENT(getpid);
+        RESET_TBL_ENT(getppid);
+        RESET_TBL_ENT(ioctl);
+        RESET_TBL_ENT(lseek);
+        RESET_TBL_ENT(lstat);
+        RESET_TBL_ENT(mkdir);
+        RESET_TBL_ENT(write);
+        RESET_TBL_ENT(mprotect);
+        RESET_TBL_ENT(read);
+        RESET_TBL_ENT(sysinfo);
+        RESET_TBL_ENT(sendto);
+        RESET_TBL_ENT(socket);
+        RESET_TBL_ENT(unlink);
+        RESET_TBL_ENT(utime);
+        RESET_TBL_ENT(umask);
+        RESET_TBL_ENT(uname);
+        RESET_TBL_ENT(stat);
+        RESET_TBL_ENT(setpgid);
+        RESET_TBL_ENT(readlink);
+ 
+
+        printk(KERN_INFO "restored syscall_table\n");
+
+
+        /*
         syscall_table[__NR_brk]           = old_brk;
         syscall_table[__NR_chdir]         = old_chdir;
         syscall_table[__NR_chmod]         = old_chmod;
@@ -1154,7 +1082,6 @@ static int exit_syscall_table(void)
         //syscall_table[__NR_nanosleep]     = old_nanosleep;
         syscall_table[__NR_setpgid]       = old_setpgid; 
         syscall_table[__NR_readlink]      = old_readlink;
-        /*
         */
 
         write_cr0(read_cr0() | CRO_WP);
@@ -1177,8 +1104,26 @@ static int init_syscall_table(void)
     printk(KERN_INFO "start to find syscall addr\n");
     syscall_table = (void**) find_syscall_table();
     printk(KERN_INFO "start to replace syscall addr\n");
-    replace_table();
+
+    fixed_set_memory_rw = (void *) kallsyms_lookup_name("set_memory_rw");
+    if (!fixed_set_memory_rw)
+    {
+        printk(KERN_INFO "unable to find set_memory_rw symbol\n");
+        //return ;
+    }
+
+    fixed_set_memory_ro = (void *) kallsyms_lookup_name("set_memory_ro");
+    if (!fixed_set_memory_ro)
+    {
+        printk(KERN_INFO "unable to find set_memory_ro symbol\n");
+        //return ;
+    }
+
+
+
+    //replace_table();
     syscall_task.status = 1;
+    last_syslist = 0;
 
     printk(KERN_INFO "init_syscall_table done\n");
     return 0;
@@ -1293,24 +1238,29 @@ static int __init cl_km_init(void)
 static void __exit cl_km_exit(void)
 {
     //exit_trivial();
-    exit_syscall_table();
+    restore_syscall_table(last_syslist);
     exit_cl_char_device();
     exit_worker_thread();
     printk(KERN_INFO "cl_km_exit done");
 }
 
 static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset){
-    long result = 0;
     pid_t pid;
     pid = *(pid_t*)buffer;
-    
-    //result = kstrtol(buffer, 0, &pid);
+    unsigned long syslist = *(unsigned long*)(buffer + sizeof(pid_t));
+
+
     //printk(KERN_INFO "result = %ld  pid = %ld\n", result, pid);
     //printk("input str:%s\n", buffer);
     if (pid >= 0){
+        //replace syscall_table 
+        restore_syscall_table(last_syslist);
+        replace_table(syslist);
+        last_syslist = syslist;
+
         targetPid = pid;
         pidFlag = 1;
-        printk(KERN_INFO "CL: pid %ld received\n", pid);
+        printk(KERN_INFO "CL: pid %d received\n", pid);
     }
     return len;
 }
