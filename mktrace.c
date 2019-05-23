@@ -51,7 +51,8 @@ int main(int argc, char** argv)
         */
         char pidStr[MSG_LEN];
         bzero(pidStr, MSG_LEN);
-        sprintf(pidStr, "%d", childPid);
+        memcpy(pidStr, &childPid, sizeof(pid_t));
+        //sprintf(pidStr, "%d", childPid);
         //sprintf(pidStr, "%d", 95277);
 
         //open the device file
@@ -63,7 +64,8 @@ int main(int argc, char** argv)
         }
 
         //send the pid
-        ret = write(fd, pidStr, strlen(pidStr));
+        ret = write(fd, pidStr, sizeof(pid_t));
+        //ret = write(fd, pidStr, strlen(pidStr));
         if (ret < 0){
             INFO("failed to write message to %s", CDF_NAME);
             wait(NULL);

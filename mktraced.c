@@ -339,7 +339,7 @@ MODULE_VERSION("0,1");
 //this contains the replaced syscall entry
 
 static int            majorNumber;
-static unsigned int   targetPid;
+static pid_t          targetPid;
 static int            pidFlag;              //0:pid unset 1:pid set
 static struct class*  clcharClass  = NULL;
 static struct device* clcharDevice = NULL;
@@ -1301,13 +1301,15 @@ static void __exit cl_km_exit(void)
 
 static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset){
     long result = 0;
-    long pid = 0;
-    result = kstrtol(buffer, 0, &pid);
-    printk(KERN_INFO "result = %ld  pid = %ld\n", result, pid);
+    pid_t pid;
+    pid = *(pid_t*)buffer;
+    
+    //result = kstrtol(buffer, 0, &pid);
+    //printk(KERN_INFO "result = %ld  pid = %ld\n", result, pid);
     //printk("input str:%s\n", buffer);
-    if (result == 0){
-        pidFlag = 1;
+    if (pid >= 0){
         targetPid = pid;
+        pidFlag = 1;
         printk(KERN_INFO "CL: pid %ld received\n", pid);
     }
     return len;
