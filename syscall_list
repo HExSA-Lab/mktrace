@@ -1,0 +1,57 @@
+brk		        done
+chdir		    done
+chmod		    done
+clock_gettime	done
+clone		    skip
+close		    done
+dup		        done
+dup2		    done
+execve		    skip
+faccessat	    done
+fchmod		    done
+fchown		    done		
+fcntl		    ?
+fstat		    done
+futex		    done
+getcwd		    done
+getdents64	    done
+getegid		
+geteuid
+getgid		    done
+getgroups
+getpgrp
+getpid		    done
+getppid		    done
+getuid
+ioctl		    done
+kill		    -
+lseek		    done
+lstat		    done
+mkdir		    done
+mmap		    ?			    current->cred is const
+mprotect	    done
+mremap
+munmap
+nanosleep	    skip			glibc 
+pipe		
+poll		    skip			current->restart_block is not a pointer
+prlimit64
+read		    done
+readlink	    done
+rt_sigaction	skip			current->pending is not a pointer
+rt_sigprocmask
+rt_sigreturn
+sendto		    done
+setpgid		    done
+set_robust_list	skip			cannot modify *robust_list pointer for the caller
+set_tid_address	skip			same reason as above
+socket		    done
+stat		    done
+sysinfo		    done
+umask		    done
+uname		    done
+unlink		    done
+utime		    done
+vfork		    skip			no way to copy the caller process
+wait4		    done			rmmod causes error
+write		    done
