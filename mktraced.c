@@ -1244,6 +1244,11 @@ static void __exit cl_km_exit(void)
     printk(KERN_INFO "cl_km_exit done");
 }
 
+/* 
+ * Input format:
+ * [PID] (4 bytes)
+ * [SYSBITMAP] (8 bytes)
+ */
 static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset){
     pid_t pid;
     pid = *(pid_t*)buffer;
