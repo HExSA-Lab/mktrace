@@ -13,8 +13,6 @@
 #include <linux/kallsyms.h>
 #include <asm/tlbflush.h>
 
-extern const unsigned long kallsyms_relative_base;
-
 #include "bitnum.h"
 
 #define CRO_WP 0x00010000
@@ -64,10 +62,7 @@ MODULE_VERSION("0,1");
         syscall_task.status = 0;\
         while(!syscall_task.status) wake_up_process(task);\
         result = syscall_task.ret;\
-    if (syscall_number == __NR_mmap){\
-        printk(KERN_INFO "ret value of mmap is %ld\n", result);\
-    }\
-    }\
+   }\
     else{\
         result = old_call;\
     }\
@@ -111,6 +106,7 @@ MODULE_VERSION("0,1");
     current->personality = syscall_task.personality;\
     current->audit_context = syscall_task.audit_context;\
     write_cr3(virt_to_phys(current->mm->pgd));\
+    __flush_tlb_all();\
     current->cred = syscall_task.cred;\
     current->real_cred = syscall_task.real_cred;
 
@@ -127,6 +123,7 @@ MODULE_VERSION("0,1");
     current->personality = old_personality;\
     current->audit_context = old_audit_context;\
     write_cr3(old_cr3);\
+    __flush_tlb_all();\
     current->cred = old_cred;\
     current->real_cred = old_real_cred;\
     break;
@@ -228,25 +225,25 @@ static struct device* clcharDevice = NULL;
 static int (*fixed_set_memory_rw)(unsigned long, int);
 static int (*fixed_set_memory_ro)(unsigned long, int);
 
-static ssize_t dev_write(struct file*, const char *, size_t, loff_t*);
+static ssize_t dev_write(struct file*, const char __user*, size_t, loff_t*);
 static struct file_operations fops = {
     .write = dev_write,
 };
 
-asmlinkage static int (*old_brk)(void*);
-asmlinkage static int (*old_chdir)(const char*);
-asmlinkage static int (*old_chmod)(const char*, mode_t);
-asmlinkage static int (*old_clock_gettime)(clockid_t, struct timespec*);
-asmlinkage static int (*old_close)(int);
-asmlinkage static int (*old_dup)(int);
-asmlinkage static int (*old_dup2)(int, int);
+asmlinkage static long (*old_brk)(unsigned long);
+asmlinkage static long (*old_chdir)(const char __user*);
+asmlinkage static long (*old_chmod)(const char __user*, mode_t);
+asmlinkage static long (*old_clock_gettime)(clockid_t, struct timespec __user*);
+asmlinkage static long (*old_close)(int);
+asmlinkage static long (*old_dup)(int);
+asmlinkage static long (*old_dup2)(int, int);
 //asmlinkage static int (*old_execve)(const char*, char** const, char** const);
-asmlinkage static int (*old_faccessat)(int, const char*, int, int);
-asmlinkage static int (*old_fchmod)(int, mode_t);
-asmlinkage static int (*old_fchown)(int, uid_t, gid_t);
-asmlinkage static int (*old_fstat)(int, struct stat*);
-asmlinkage static int (*old_futex)(int*, int, int, const struct timespec*, int*, int);
-asmlinkage static long (*old_getcwd)(char __user*, size_t);
+asmlinkage static long (*old_faccessat)(int, const char __user*, int);
+asmlinkage static long (*old_fchmod)(int, mode_t);
+asmlinkage static long (*old_fchown)(unsigned int, uid_t, gid_t);
+asmlinkage static long (*old_fstat)(unsigned int, struct __old_kernel_stat __user*);
+asmlinkage static long (*old_futex)(u32 __user*, int, u32, struct timespec __user*, u32 __user*, u32);
+asmlinkage static long (*old_getcwd)(char __user*, unsigned long);
 asmlinkage static long (*old_getdents64)(unsigned int, struct linux_dirent64 __user *, unsigned int);
 asmlinkage static long (*old_getgid)(void);
 asmlinkage static long (*old_getpid)(void);
@@ -269,26 +266,26 @@ asmlinkage static long (*old_utime)(char __user*, struct utimbuf __user*);
 asmlinkage static long (*old_umask)(int);
 asmlinkage static long (*old_uname)(struct old_utsname __user*);
 asmlinkage static long (*old_stat)(const char __user *, struct __old_kernel_stat __user *);
-asmlinkage static long (*old_nanosleep)(const struct timespec*, struct timespec*);
+asmlinkage static long (*old_nanosleep)(const struct timespec __user*, struct timespec __user*);
 asmlinkage static long (*old_setpgid)(pid_t, pid_t);
 asmlinkage static long (*old_readlink)(const char __user*, char __user*, int);
 
 
-static int my_brk(void*);
-static int my_chdir(const char*);
-static int my_chmod(const char*, mode_t);
-static int my_clock_gettime(clockid_t, struct timespec*);
-static int my_close(int);
-static int my_dup(int);
-static int my_dup2(int, int);
+static long my_brk(unsigned long);
+static long my_chdir(const char __user*);
+static long my_chmod(const char __user*, mode_t);
+static long my_clock_gettime(clockid_t, struct timespec __user*);
+static long my_close(int);
+static long my_dup(int);
+static long my_dup2(int, int);
 //static int my_execve(const char*, char** const, char** const);
-static int my_faccessat(int, const char*, int, int);
-static int my_fchmod(int, mode_t);
-static int my_fchown(int, uid_t, gid_t);
-static int my_fstat(int, struct stat*);
-static int my_futex(int*, int, int, const struct timespec*, int*, int);
-static long my_getcwd(char __user*, size_t);
-static long my_getdents64(unsigned int, struct linux_dirent64 __user *, unsigned ing);
+static long my_faccessat(int, const char __user*, int);
+static long my_fchmod(int, mode_t);
+static long my_fchown(unsigned int, uid_t, gid_t);
+static long my_fstat(unsigned int, struct __old_kernel_stat __user*);
+static long my_futex(u32 __user*, int, u32, struct timespec __user*, u32 __user*, u32);
+static long my_getcwd(char __user*, unsigned long);
+static long my_getdents64(unsigned int, struct linux_dirent64 __user *, unsigned int);
 static long my_getgid(void);
 static long my_getpid(void);
 static long my_getppid(void);
@@ -351,15 +348,14 @@ static struct task_struct* worker_id;
 
 static unsigned long** find_syscall_table(void)
 {
-#if defined(CONFIG_X86_64) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0))
-    //unsigned long sys_close = kallsyms_lookup_name("__x64_sys_close");
-    return kallsyms_lookup_name("sys_call_table");
-#else
-
     unsigned long ptr;
     unsigned long *p;
 
-    printk(KERN_INFO "sys_close is at %p\n", (void*)sys_close);
+#if defined(CONFIG_X86_64) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0))
+    unsigned long ret = kallsyms_lookup_name("syscall_table");
+    printk("Found syscall table at %p\n", (void*)ret);
+    return ret;
+#else 
 
     for (ptr = (unsigned long) sys_close;
             ptr < (unsigned long) &loops_per_jiffy;
@@ -368,16 +364,14 @@ static unsigned long** find_syscall_table(void)
         p = (unsigned long*) ptr;
 
         if(p[__NR_close] == (unsigned long) sys_close){
-            printk(KERN_INFO "found syscall table\n");
+            printk("found syscall table");
             return (unsigned long**) p;
         }
     }
-
-    printk(KERN_ERR "syscall table not found\n");
+    printk("syscall table not found");
     return NULL;
 #endif
 }
-
 static int worker(void* data){
     printk("worker launched\n");
     while(1)
@@ -414,7 +408,7 @@ static int worker(void* data){
                         current->active_mm = old_active_mm;
                         break;
                         */
-                        HANDLE_CALL1(old_brk, void*);
+                        HANDLE_CALL1(old_brk, unsigned long);
                     }
                 case __NR_chdir:
                     {
@@ -462,7 +456,7 @@ static int worker(void* data){
                     */
                 case __NR_faccessat:
                     {
-                        HANDLE_CALL4(old_faccessat, int, const char*, int, int);
+                        HANDLE_CALL3(old_faccessat, int, const char*, int);
                     }
                 case __NR_fchmod:
                     {
@@ -474,11 +468,11 @@ static int worker(void* data){
                     }
                 case __NR_fstat:
                     {
-                        HANDLE_CALL2(old_fstat, int, struct stat*);
+                        HANDLE_CALL2(old_fstat, int, struct __old_kernel_stat*);
                     }
                 case __NR_futex:
                     {
-                        HANDLE_CALL6(old_futex, int*, int, int, const struct timespec*, int*, int);
+                        HANDLE_CALL6(old_futex, u32*, int, u32, const struct timespec*, u32*, u32);
                     }
                 case __NR_getcwd:
                     {
@@ -495,7 +489,8 @@ static int worker(void* data){
                        syscall_task.ret = (unsigned long)((syscall_task.cred)->gid);
                        syscall_task.status = 1;
                        */
-                       break;
+                       //break;
+                       HANDLE_CALL0(old_getgid);
                     }
                 case __NR_getpid:
                     {
@@ -579,7 +574,7 @@ static int worker(void* data){
                     }
                 case __NR_nanosleep:
                     {
-                        HANDLE_CALL2(old_nanosleep, const struct timespec*, struct timespec*);
+                        HANDLE_CALL2(old_nanosleep, const struct timespec __user*, struct timespec __user*);
                     }
                 case __NR_setpgid:
                     {
@@ -614,65 +609,37 @@ static int worker(void* data){
     return 0;
 }
 
-static int my_brk(void* addr)
+static long my_brk(unsigned long brk)
 {
-    /*
-    int result;
-    result = old_brk(addr);
-    return result;
-      */
-
-    printk(KERN_INFO "my_brk invoked\n");
-    syscall_wrapper(__NR_brk, old_brk(addr));
+   syscall_wrapper(__NR_brk, old_brk(brk));
 }
 
-static int my_chdir(const char* path)
+static long my_chdir(const char __user* filename)
 {
-    /*
-    int result;
-    syscall_task.arg1 = (unsigned long long) path;
-    syscall_task.call_num = __NR_chdir;
-    syscall_task.status = 0;
-    wake_up_process(task);
-    while(!syscall_task.status);
-    result = syscall_task.ret;
-    return result;
-    */
-    syscall_wrapper(__NR_chdir, old_chdir(path));
+   syscall_wrapper(__NR_chdir, old_chdir(filename));
 }
 
-static int my_chmod(const char* pathname, mode_t mode)
+static long my_chmod(const char* filename, mode_t mode)
 {
-    /*
-    int result;
-    syscall_task.arg1 = (unsigned long long) pathname;
-    syscall_task.arg2 = (unsigned long long) mode;
-    syscall_task.call_num = __NR_chmod;
-    syscall_task.status = 0;
-    wake_up_process(task);
-    while(!syscall_task.status);
-    result = syscall_task.ret;
-    return result;
-    */
-    syscall_wrapper(__NR_chmod, old_chmod(pathname, mode));
+   syscall_wrapper(__NR_chmod, old_chmod(filename, mode));
 }
 
-static int my_clock_gettime(clockid_t clk_id, struct timespec* tp)
+static long my_clock_gettime(clockid_t clk_id, struct timespec __user* tp)
 {
     syscall_wrapper(__NR_clock_gettime, old_clock_gettime(clk_id, tp));
 }
 
-static int my_close(int fd)
+static long my_close(int fd)
 {
     syscall_wrapper(__NR_close, old_close(fd));
 }
 
-static int my_dup(int oldfd)
+static long my_dup(int oldfd)
 {
     syscall_wrapper(__NR_dup, old_dup(oldfd));
 }
 
-static int my_dup2(int oldfd, int newfd)
+static long my_dup2(int oldfd, int newfd)
 {
     syscall_wrapper(__NR_dup2, old_dup2(oldfd, newfd));
 }
@@ -684,29 +651,29 @@ static int my_execve(const char* filename, char* const argv[], char* const envp[
 }
 */
 
-static int my_faccessat(int dirfd, const char* pathname, int mode, int flags)
+static long my_faccessat(int dfd, const char __user* filename, int mode)
 {
-    syscall_wrapper(__NR_faccessat, old_faccessat(dirfd, pathname, mode, flags));
+    syscall_wrapper(__NR_faccessat, old_faccessat(dfd, filename, mode));
 }
 
-static int my_fchmod(int fd, mode_t mode)
+static long my_fchmod(int fd, mode_t mode)
 {
     syscall_wrapper(__NR_fchmod, old_fchmod(fd, mode));
 }
 
-static int my_fchown(int fd, uid_t owner, gid_t group)
+static long my_fchown(unsigned int fd, uid_t owner, gid_t group)
 {
     syscall_wrapper(__NR_fchown, old_fchown(fd, owner, group));
 }
 
-static int my_fstat(int fd, struct stat* buf)
+static long my_fstat(unsigned int fd, struct __old_kernel_stat __user* buf)
 {
     syscall_wrapper(__NR_fstat, old_fstat(fd, buf));
 }
 
-static int my_futex(int* uaddr, int futex_op, int val, const struct timespec* timeout, int* uaddr2, int val3)
+static long my_futex(u32 __user* uaddr, int op, u32 val, struct timespec __user *utime, u32 __user *uaddr2, u32 val3)
 {
-    syscall_wrapper(__NR_futex, old_futex(uaddr, futex_op, val, timeout, uaddr2, val3));
+    syscall_wrapper(__NR_futex, old_futex(uaddr, op, val, utime, uaddr2, val3));
 }
 
 static long my_getcwd(char __user* buf, unsigned long size)
@@ -824,7 +791,7 @@ static long my_stat(const char __user* filename, struct __old_kernel_stat __user
     syscall_wrapper(__NR_stat, old_stat(filename, statbuf));
 }
 
-static long my_nanosleep(const struct timespec* reg, struct timespec* rem)
+static long my_nanosleep(const struct timespec __user* reg, struct timespec __user* rem)
 {
     syscall_wrapper(__NR_nanosleep, old_nanosleep(reg, rem));
 }
@@ -843,19 +810,58 @@ static long my_readlink(const char __user *path, char __user *buf, int bufsiz)
 //
 static void replace_table(unsigned long syslist)
 {
-    if (syscall_table != NULL){
+    /*
+    old_brk           = syscall_table[__NR_brk];
+    old_chdir         = syscall_table[__NR_chdir];
+    old_chmod         = syscall_table[__NR_chmod];
+    old_clock_gettime = syscall_table[__NR_clock_gettime];
+    old_close         = syscall_table[__NR_close];
+    old_dup           = syscall_table[__NR_dup];
+    old_dup2          = syscall_table[__NR_dup2];
+    //old_execve        = syscall_table[__NR_execve];
+    old_faccessat     = syscall_table[__NR_faccessat];
+    old_fchmod        = syscall_table[__NR_fchmod];
+    old_fchown        = syscall_table[__NR_fchown];
+    old_fstat         = syscall_table[__NR_fstat];
+    //old_futex         = syscall_table[__NR_futex];
+    old_getcwd        = syscall_table[__NR_getcwd];
+    old_getdents64    = syscall_table[__NR_getdents64];
+    old_getgid        = syscall_table[__NR_getgid];
+    old_getpid        = syscall_table[__NR_getpid];
+    old_getppid       = syscall_table[__NR_getppid];
+    old_ioctl         = syscall_table[__NR_ioctl];
+    //old_kill          = syscall_table[__NR_kill];
+    old_lseek         = syscall_table[__NR_lseek];
+    old_lstat         = syscall_table[__NR_lstat];
+    old_mkdir         = syscall_table[__NR_mkdir];
+    //old_mmap          = syscall_table[__NR_mmap];
+    old_write         = syscall_table[__NR_write];
+    old_mprotect      = syscall_table[__NR_mprotect];
+    old_read          = syscall_table[__NR_read];
+    old_sysinfo       = syscall_table[__NR_sysinfo];
+    old_sendto        = syscall_table[__NR_sendto];
+    old_socket        = syscall_table[__NR_socket];
+    old_unlink        = syscall_table[__NR_unlink];
+    //old_wait4         = syscall_table[__NR_wait4];
+    old_utime         = syscall_table[__NR_utime];
+    old_umask         = syscall_table[__NR_umask];
+    old_uname         = syscall_table[__NR_uname];
+    old_stat          = syscall_table[__NR_stat];
+    //old_nanosleep     = syscall_table[__NR_nanosleep];
+    old_setpgid       = syscall_table[__NR_setpgid];
+    old_readlink      = syscall_table[__NR_readlink];
+    */
+
+        if (syscall_table != NULL){
         int ret;
         unsigned long addr;
         unsigned long old_cr0;
         old_cr0 = read_cr0();
 
-        printk(KERN_INFO "disabling write protection\n");
         write_cr0(old_cr0 & ~CRO_WP);
         addr = (unsigned long) syscall_table;
-        printk(KERN_INFO "making syscall table rw\n");
-        //ret = fixed_set_memory_rw(PAGE_ALIGN(addr) - PAGE_SIZE, 1);
-        ret = fixed_set_memory_rw(addr, 1);
-        printk(KERN_INFO "flushing TLB\n");
+        ret = fixed_set_memory_rw(PAGE_ALIGN(addr) - PAGE_SIZE, 1);
+        write_cr3(virt_to_phys(current->mm->pgd));
         __flush_tlb_all();
 
         if (ret)
@@ -864,11 +870,7 @@ static void replace_table(unsigned long syslist)
             return ;
         }
 
-        printk(KERN_INFO "Modifying syscall table based on bitmap\n");
-
         SET_TBL_ENT(brk);
-        //old_brk = syscall_table[__NR_brk];
-        //syscall_table[__NR_brk] = my_brk;
         SET_TBL_ENT(chdir);
         SET_TBL_ENT(chmod);
         SET_TBL_ENT(clock_gettime);
@@ -902,13 +904,13 @@ static void replace_table(unsigned long syslist)
         SET_TBL_ENT(setpgid);
         SET_TBL_ENT(readlink);
         /*
-           syscall_table[__NR_brk]           = my_brk;
-           syscall_table[__NR_chdir]         = my_chdir;
-           syscall_table[__NR_chmod]         = my_chmod;
-           syscall_table[__NR_clock_gettime] = my_clock_gettime;
-           syscall_table[__NR_close]         = my_close;
-           syscall_table[__NR_dup]           = my_dup;
-           syscall_table[__NR_dup2]          = my_dup2;
+        syscall_table[__NR_brk]           = my_brk;
+        syscall_table[__NR_chdir]         = my_chdir;
+        syscall_table[__NR_chmod]         = my_chmod;
+        syscall_table[__NR_clock_gettime] = my_clock_gettime;
+        syscall_table[__NR_close]         = my_close;
+        syscall_table[__NR_dup]           = my_dup;
+        syscall_table[__NR_dup2]          = my_dup2;
         //syscall_table[__NR_execve]        = my_execve;
         syscall_table[__NR_faccessat]     = my_faccessat;
         syscall_table[__NR_fchmod]        = my_fchmod;
@@ -942,19 +944,17 @@ static void replace_table(unsigned long syslist)
         syscall_table[__NR_setpgid]       = my_setpgid;
         syscall_table[__NR_readlink]      = my_readlink;
         */
+    
 
-        //printk(KERN_INFO "restoring Cr0\n");
-
-        //write_cr0(old_cr0);
-        //printk(KERN_INFO "restoring syscall table permissions\n");
-        //ret = fixed_set_memory_ro(addr, 1);
-        //printk(KERN_INFO "flusing TLB again\n");
-        //__flush_tlb_all();
-    } else {
-        printk(KERN_ERR "replace_table cannot find the location of syscall_table\n");
+        write_cr0(old_cr0);
+        ret = fixed_set_memory_ro(PAGE_ALIGN(addr) - PAGE_SIZE, 1);
+        write_cr3(virt_to_phys(current->mm->pgd));
+        __flush_tlb_all();
     }
-
-    printk(KERN_INFO "done replacing syscall table\n");
+    else
+    {
+        printk(KERN_INFO "replace_table cannot find the location of syscall_table\n");
+    }
 }
 
 
@@ -970,8 +970,8 @@ static int restore_syscall_table(unsigned long syslist)
 
         write_cr0(read_cr0() & ~CRO_WP);
         addr = (unsigned long) syscall_table;
-        //ret = fixed_set_memory_rw(PAGE_ALIGN(addr) - PAGE_SIZE, 1);
-        ret = fixed_set_memory_rw(addr, 1);
+        ret = fixed_set_memory_rw(PAGE_ALIGN(addr) - PAGE_SIZE, 1);
+        __flush_tlb_all();
         //printk(KERN_INFO "after write_cr0\n");
 
         if (ret)
@@ -1014,14 +1014,58 @@ static int restore_syscall_table(unsigned long syslist)
         RESET_TBL_ENT(stat);
         RESET_TBL_ENT(setpgid);
         RESET_TBL_ENT(readlink);
+ 
 
         printk(KERN_INFO "restored syscall_table\n");
+
+
+        /*
+        syscall_table[__NR_brk]           = old_brk;
+        syscall_table[__NR_chdir]         = old_chdir;
+        syscall_table[__NR_chmod]         = old_chmod;
+        syscall_table[__NR_clock_gettime] = old_clock_gettime;
+        syscall_table[__NR_close]         = old_close;
+        syscall_table[__NR_dup]           = old_dup;
+        syscall_table[__NR_dup2]          = old_dup2;
+        //syscall_table[__NR_execve]        = old_execve;
+        syscall_table[__NR_faccessat]     = old_faccessat;
+        syscall_table[__NR_fchmod]        = old_fchmod;
+        syscall_table[__NR_fchown]        = old_fchown;
+        syscall_table[__NR_fstat]         = old_fstat;
+        //syscall_table[__NR_futex]         = old_futex;
+        syscall_table[__NR_getcwd]        = old_getcwd;
+        syscall_table[__NR_getdents64]    = old_getdents64;
+        syscall_table[__NR_getgid]        = old_getgid;
+        syscall_table[__NR_getpid]        = old_getpid;
+        syscall_table[__NR_getppid]       = old_getppid;
+        syscall_table[__NR_ioctl]         = old_ioctl;
+        syscall_table[__NR_lseek]         = old_lseek;
+        //syscall_table[__NR_kill]          = old_kill;
+        syscall_table[__NR_lstat]         = old_lstat;
+        syscall_table[__NR_mkdir]         = old_mkdir;
+        //syscall_table[__NR_mmap]          = old_mmap;
+        syscall_table[__NR_write]         = old_write;
+        syscall_table[__NR_mprotect]      = old_mprotect;
+        syscall_table[__NR_read]          = old_read;
+        syscall_table[__NR_sysinfo]       = old_sysinfo;
+        syscall_table[__NR_sendto]        = old_sendto;
+        syscall_table[__NR_socket]        = old_socket;
+        syscall_table[__NR_unlink]        = old_unlink;
+        //syscall_table[__NR_wait4]         = old_wait4;
+        syscall_table[__NR_utime]         = old_utime;
+        syscall_table[__NR_umask]         = old_umask;
+        syscall_table[__NR_uname]         = old_uname;
+        syscall_table[__NR_stat]          = old_stat;
+        //syscall_table[__NR_nanosleep]     = old_nanosleep;
+        syscall_table[__NR_setpgid]       = old_setpgid; 
+        syscall_table[__NR_readlink]      = old_readlink;
+        */
 
         write_cr0(read_cr0() | CRO_WP);
 
         addr = (unsigned long) syscall_table;
-        //ret = fixed_set_memory_ro(PAGE_ALIGN(addr) - PAGE_SIZE, 1);
-        //ret = fixed_set_memory_ro(addr, 1);
+        ret = fixed_set_memory_ro(PAGE_ALIGN(addr) - PAGE_SIZE, 1);
+        __flush_tlb_all();
         //printk(KERN_INFO "sys_brk was restored\n");
     }
 
@@ -1037,27 +1081,25 @@ static int init_syscall_table(void)
 
     printk(KERN_INFO "start to find syscall addr\n");
     syscall_table = (void**) find_syscall_table();
-
-    if (syscall_table == NULL) {
-        printk(KERN_ERR "Could not find syscall table\n");
-    }
-
     printk(KERN_INFO "start to replace syscall addr\n");
 
     fixed_set_memory_rw = (void *) kallsyms_lookup_name("set_memory_rw");
     if (!fixed_set_memory_rw)
     {
-        printk(KERN_ERR "unable to find set_memory_rw symbol\n");
+        printk(KERN_INFO "unable to find set_memory_rw symbol\n");
         //return ;
     }
 
     fixed_set_memory_ro = (void *) kallsyms_lookup_name("set_memory_ro");
     if (!fixed_set_memory_ro)
     {
-        printk(KERN_ERR "unable to find set_memory_ro symbol\n");
+        printk(KERN_INFO "unable to find set_memory_ro symbol\n");
         //return ;
     }
 
+
+
+    //replace_table();
     syscall_task.status = 1;
     last_syslist = 0;
 
@@ -1185,38 +1227,30 @@ static void __exit cl_km_exit(void)
  * [PID] (4 bytes)
  * [SYSBITMAP] (8 bytes)
  */
-static ssize_t dev_write(struct file *filep, const char * buffer, size_t len, loff_t *offset){
-    char buf[12];
-    printk(KERN_INFO "dev_write called\n");
+static ssize_t dev_write(struct file *filep, const char __user *buffer, size_t len, loff_t *offset){
     pid_t pid;
-    copy_from_user(buf, buffer, 12);
-    printk(KERN_INFO "about to access buffer\n");
+    char buf[12];
+    if(copy_from_user(buf, buffer, len)){
+	printk(KERN_ERR "[dev_write] failed to copy data from buffer\n");
+    }
+    *offset += len;
+
     pid = *(pid_t*)buf;
     unsigned long syslist = *(unsigned long*)(buf + sizeof(pid_t));
 
 
-    printk(KERN_INFO "pid = %d\n", pid);
-    printk(KERN_INFO "syscall bitmap = 0x%lx\n", syslist);
-
+    //printk(KERN_INFO "result = %ld  pid = %ld\n", result, pid);
+    //printk("input str:%s\n", buffer);
     if (pid >= 0){
         //replace syscall_table 
         restore_syscall_table(last_syslist);
         replace_table(syslist);
-        printk(KERN_INFO "replacing last syslist\n");
         last_syslist = syslist;
 
-        printk(KERN_INFO "setting targetPid\n");
         targetPid = pid;
-        printk(KERN_INFO "setting pid flag\n");
         pidFlag = 1;
         printk(KERN_INFO "CL: pid %d received\n", pid);
-    } else {
-        printk(KERN_ERR "Bad PID given (%d)\n", pid);
-        return -1;
     }
-
-    printk(KERN_INFO "dev_write complete\n");
-
     return len;
 }
 
