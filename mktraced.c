@@ -202,7 +202,7 @@ MODULE_VERSION("0,1");
 
 #define RESET_TBL_ENT(sysname)\
 ({\
-    if ((syslist & __BN_##sysname) > 0){\
+    if ((last_syslist & __BN_##sysname) > 0){\
         syscall_table[__NR_##sysname] = old_##sysname;\
     }\
 })
@@ -810,48 +810,6 @@ static long my_readlink(const char __user *path, char __user *buf, int bufsiz)
 //
 static void replace_table(unsigned long syslist)
 {
-    /*
-    old_brk           = syscall_table[__NR_brk];
-    old_chdir         = syscall_table[__NR_chdir];
-    old_chmod         = syscall_table[__NR_chmod];
-    old_clock_gettime = syscall_table[__NR_clock_gettime];
-    old_close         = syscall_table[__NR_close];
-    old_dup           = syscall_table[__NR_dup];
-    old_dup2          = syscall_table[__NR_dup2];
-    //old_execve        = syscall_table[__NR_execve];
-    old_faccessat     = syscall_table[__NR_faccessat];
-    old_fchmod        = syscall_table[__NR_fchmod];
-    old_fchown        = syscall_table[__NR_fchown];
-    old_fstat         = syscall_table[__NR_fstat];
-    //old_futex         = syscall_table[__NR_futex];
-    old_getcwd        = syscall_table[__NR_getcwd];
-    old_getdents64    = syscall_table[__NR_getdents64];
-    old_getgid        = syscall_table[__NR_getgid];
-    old_getpid        = syscall_table[__NR_getpid];
-    old_getppid       = syscall_table[__NR_getppid];
-    old_ioctl         = syscall_table[__NR_ioctl];
-    //old_kill          = syscall_table[__NR_kill];
-    old_lseek         = syscall_table[__NR_lseek];
-    old_lstat         = syscall_table[__NR_lstat];
-    old_mkdir         = syscall_table[__NR_mkdir];
-    //old_mmap          = syscall_table[__NR_mmap];
-    old_write         = syscall_table[__NR_write];
-    old_mprotect      = syscall_table[__NR_mprotect];
-    old_read          = syscall_table[__NR_read];
-    old_sysinfo       = syscall_table[__NR_sysinfo];
-    old_sendto        = syscall_table[__NR_sendto];
-    old_socket        = syscall_table[__NR_socket];
-    old_unlink        = syscall_table[__NR_unlink];
-    //old_wait4         = syscall_table[__NR_wait4];
-    old_utime         = syscall_table[__NR_utime];
-    old_umask         = syscall_table[__NR_umask];
-    old_uname         = syscall_table[__NR_uname];
-    old_stat          = syscall_table[__NR_stat];
-    //old_nanosleep     = syscall_table[__NR_nanosleep];
-    old_setpgid       = syscall_table[__NR_setpgid];
-    old_readlink      = syscall_table[__NR_readlink];
-    */
-
         if (syscall_table != NULL){
         int ret;
         unsigned long addr;
@@ -945,6 +903,7 @@ static void replace_table(unsigned long syslist)
         syscall_table[__NR_readlink]      = my_readlink;
         */
     
+        last_syslist = syslist;
 
         write_cr0(old_cr0);
         ret = fixed_set_memory_ro(PAGE_ALIGN(addr) - PAGE_SIZE, 1);
@@ -958,7 +917,7 @@ static void replace_table(unsigned long syslist)
 }
 
 
-static int restore_syscall_table(unsigned long syslist)
+static int restore_syscall_table(void)
 {
     //printk(KERN_INFO "restore_syscall_table called\n");
     if (syscall_table != NULL)
@@ -1081,7 +1040,7 @@ static int init_syscall_table(void)
 
     printk(KERN_INFO "start to find syscall addr\n");
     syscall_table = (void**) find_syscall_table();
-    printk(KERN_INFO "start to replace syscall addr\n");
+    printk(KERN_INFO "syscall_table addr:%016x\n", syscall_table);
 
     fixed_set_memory_rw = (void *) kallsyms_lookup_name("set_memory_rw");
     if (!fixed_set_memory_rw)
@@ -1099,9 +1058,9 @@ static int init_syscall_table(void)
 
 
 
-    //replace_table();
-    syscall_task.status = 1;
+    //replace_table(__BN_read);
     last_syslist = 0;
+    syscall_task.status = 1;
 
     printk(KERN_INFO "init_syscall_table done\n");
     return 0;
@@ -1216,7 +1175,7 @@ static int __init cl_km_init(void)
 static void __exit cl_km_exit(void)
 {
     //exit_trivial();
-    restore_syscall_table(last_syslist);
+    restore_syscall_table();
     exit_cl_char_device();
     exit_worker_thread();
     printk(KERN_INFO "cl_km_exit done");
@@ -1243,9 +1202,8 @@ static ssize_t dev_write(struct file *filep, const char __user *buffer, size_t l
     //printk("input str:%s\n", buffer);
     if (pid >= 0){
         //replace syscall_table 
-        restore_syscall_table(last_syslist);
+        restore_syscall_table();
         replace_table(syslist);
-        last_syslist = syslist;
 
         targetPid = pid;
         pidFlag = 1;
