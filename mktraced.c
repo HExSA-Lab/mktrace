@@ -380,8 +380,8 @@ static int worker(void* data){
         //printk(KERN_INFO "about to check syscall_task value\n");
         if(syscall_task.status == 0)
         {
-            printk(KERN_INFO "syscall_task value checked\n");
-            printk(KERN_INFO "syscall_num = %lu\n", syscall_task.call_num);
+            //printk(KERN_INFO "syscall_task value checked\n");
+            //printk(KERN_INFO "syscall_num = %lu\n", syscall_task.call_num);
             switch(syscall_task.call_num)
             {
 
@@ -861,6 +861,8 @@ static void replace_table(unsigned long syslist)
         SET_TBL_ENT(stat);
         SET_TBL_ENT(setpgid);
         SET_TBL_ENT(readlink);
+	SET_TBL_ENT(futex);
+	SET_TBL_ENT(wait4);
         /*
         syscall_table[__NR_brk]           = my_brk;
         syscall_table[__NR_chdir]         = my_chdir;
@@ -973,6 +975,8 @@ static int restore_syscall_table(void)
         RESET_TBL_ENT(stat);
         RESET_TBL_ENT(setpgid);
         RESET_TBL_ENT(readlink);
+	RESET_TBL_ENT(futex);
+	RESET_TBL_ENT(wait4);
  
 
         printk(KERN_INFO "restored syscall_table\n");
@@ -1040,7 +1044,7 @@ static int init_syscall_table(void)
 
     printk(KERN_INFO "start to find syscall addr\n");
     syscall_table = (void**) find_syscall_table();
-    printk(KERN_INFO "syscall_table addr:%016x\n", syscall_table);
+    printk(KERN_INFO "syscall_table addr:0x%p\n", syscall_table);
 
     fixed_set_memory_rw = (void *) kallsyms_lookup_name("set_memory_rw");
     if (!fixed_set_memory_rw)
@@ -1189,13 +1193,14 @@ static void __exit cl_km_exit(void)
 static ssize_t dev_write(struct file *filep, const char __user *buffer, size_t len, loff_t *offset){
     pid_t pid;
     char buf[12];
+    unsigned long syslist;
+
     if(copy_from_user(buf, buffer, len)){
 	printk(KERN_ERR "[dev_write] failed to copy data from buffer\n");
     }
     *offset += len;
-
     pid = *(pid_t*)buf;
-    unsigned long syslist = *(unsigned long*)(buf + sizeof(pid_t));
+    syslist = *(unsigned long*)(buf + sizeof(pid_t));
 
 
     //printk(KERN_INFO "result = %ld  pid = %ld\n", result, pid);
