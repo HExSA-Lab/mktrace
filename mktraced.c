@@ -98,6 +98,7 @@ MODULE_VERSION("0,1");
     old_cr3 = read_cr3();\
     old_cred = current->cred;\
     old_real_cred = current->real_cred;\
+    task_lock(current);\
     current->files = syscall_task.files;\
     current->fs = syscall_task.fs;\
     current->nsproxy = syscall_task.nsproxy;\
@@ -105,15 +106,17 @@ MODULE_VERSION("0,1");
     current->real_parent = syscall_task.real_parent;\
     current->personality = syscall_task.personality;\
     current->audit_context = syscall_task.audit_context;\
+    current->cred = syscall_task.cred;\
+    current->real_cred = syscall_task.real_cred;\
+    task_unlock(current);\
     unuse_mm(current->active_mm);\
     use_mm(syscall_task.active_mm);\
     __flush_tlb_all();\
-    current->cred = syscall_task.cred;\
-    current->real_cred = syscall_task.real_cred;
 
 
 #define HANDLE_BOT  \
     syscall_task.status = 1;\
+    task_lock(current);\
     current->files = old_files;\
     current->fs = old_fs;\
     current->nsproxy = old_nsproxy;\
@@ -121,11 +124,12 @@ MODULE_VERSION("0,1");
     current->real_parent = old_real_parent;\
     current->personality = old_personality;\
     current->audit_context = old_audit_context;\
+    current->cred = old_cred;\
+    current->real_cred = old_real_cred;\
+    task_unlock(current);\
     unuse_mm(current->active_mm);\
     use_mm(old_active_mm);\
     __flush_tlb_all();\
-    current->cred = old_cred;\
-    current->real_cred = old_real_cred;\
     break;
 
 #define HANDLE_CALL0(CALL_NAME)\
@@ -210,7 +214,6 @@ MODULE_VERSION("0,1");
 static struct task_struct* task;
 
 
-//static void* shadow_table[600];    //not sure the length of the actual syscall_table
 //this contains the replaced syscall entry
 
 static int            majorNumber;
@@ -278,7 +281,6 @@ static long my_clock_gettime(clockid_t, struct timespec __user*);
 static long my_close(int);
 static long my_dup(int);
 static long my_dup2(int, int);
-//static int my_execve(const char*, char** const, char** const);
 static long my_faccessat(int, const char __user*, int);
 static long my_fchmod(int, mode_t);
 static long my_fchown(unsigned int, uid_t, gid_t);
@@ -310,9 +312,6 @@ static long my_stat(const char __user *, struct __old_kernel_stat __user *);
 static long my_nanosleep(const struct timespec*, struct timespec*);
 static long my_setpgid(pid_t, pid_t);
 static long my_readlink(const char __user*, char __user*, int);
-
-
-
 
 static void** syscall_table;
 
@@ -377,59 +376,21 @@ static int worker(void* data){
     while(1)
     {
 
-        //printk(KERN_INFO "about to check syscall_task value\n");
         if(syscall_task.status == 0)
         {
-            //printk(KERN_INFO "syscall_task value checked\n");
-            //printk(KERN_INFO "syscall_num = %lu\n", syscall_task.call_num);
             switch(syscall_task.call_num)
             {
 
                 case __NR_brk:
                     {
-                        //int (*func)(void*);
-                        //func = shadow_table[__NR_brk];
-                        /*
-                        struct mm_struct* old_mm;
-                        struct mm_struct* old_active_mm;
-
-                        old_mm = current->mm;
-                        old_active_mm = current->active_mm;
-
-                        current->mm = syscall_task.mm;
-                        current->active_mm = syscall_task.active_mm;
-                        
-                        //printk(KERN_INFO "sys_brk called!!!!!\n");
-                        syscall_task.ret = (*old_brk)((void*)syscall_task.arg1);
-                        //printk(KERN_INFO "sys_brk returned\n");
-                        syscall_task.status = 1;
-
-                        current->mm = old_mm;
-                        current->active_mm = old_active_mm;
-                        break;
-                        */
                         HANDLE_CALL1(old_brk, unsigned long);
                     }
                 case __NR_chdir:
                     {
-                        /*
-                           int (*func)(const char* path);
-                           func = shadow_table[__NR_chdir];
-                           syscall_task.ret = (*func)((char*) syscall_task.arg1);
-                           syscall_task.status = 1;
-                            break;
-                           */
                         HANDLE_CALL1(old_chdir, const char*);
                     }
                 case __NR_chmod:
                     {
-                        /*
-                           int (*func)(const char* path, mode_t);
-                           func = shadow_table[__NR_chmod];
-                           syscall_task.ret = (*func)((char*) syscall_task.arg1, (mode_t) syscall_task.arg2);
-                           syscall_task.status = 1;
-                            break;
-                           */
                         HANDLE_CALL2(old_chmod, const char*, mode_t);
                     }
                 case __NR_clock_gettime:
@@ -448,12 +409,6 @@ static int worker(void* data){
                     {
                         HANDLE_CALL2(old_dup2, int, int);
                     }
-                    /*
-                case __NR_execve:
-                    {
-                        HANDLE_CALL3(old_execve, const char*, char** const, char** const);
-                    }
-                    */
                 case __NR_faccessat:
                     {
                         HANDLE_CALL3(old_faccessat, int, const char*, int);
@@ -485,11 +440,6 @@ static int worker(void* data){
                 case __NR_getgid:
                     {
                         //this is a special case since current->cred is const
-                        /*
-                       syscall_task.ret = (unsigned long)((syscall_task.cred)->gid);
-                       syscall_task.status = 1;
-                       */
-                       //break;
                        HANDLE_CALL0(old_getgid);
                     }
                 case __NR_getpid:
@@ -601,11 +551,8 @@ static int worker(void* data){
             printk(KERN_INFO "worker thread returns\n");
             return 0;
         }
-        //printk(KERN_INFO "syscall_task value checked\n");
     }
     
-    /* 
-    */
     return 0;
 }
 
@@ -643,13 +590,6 @@ static long my_dup2(int oldfd, int newfd)
 {
     syscall_wrapper(__NR_dup2, old_dup2(oldfd, newfd));
 }
-
-/*
-static int my_execve(const char* filename, char* const argv[], char* const envp[])
-{
-    syscall_wrapper(__NR_execve, old_execve(filename, argv, envp));
-}
-*/
 
 static long my_faccessat(int dfd, const char __user* filename, int mode)
 {
@@ -807,7 +747,6 @@ static long my_readlink(const char __user *path, char __user *buf, int bufsiz)
 }
 //this function store the replaced syscall entry into shadow_table
 //and replace the syscall_table with our wrapping functions
-//
 static void replace_table(unsigned long syslist)
 {
         if (syscall_table != NULL){
@@ -879,7 +818,6 @@ static void replace_table(unsigned long syslist)
 
 static int restore_syscall_table(void)
 {
-    //printk(KERN_INFO "restore_syscall_table called\n");
     if (syscall_table != NULL)
     {
         int ret;
@@ -891,7 +829,6 @@ static int restore_syscall_table(void)
         addr = (unsigned long) syscall_table;
         ret = fixed_set_memory_rw(PAGE_ALIGN(addr) - PAGE_SIZE, 1);
         __flush_tlb_all();
-        //printk(KERN_INFO "after write_cr0\n");
 
         if (ret)
         {
@@ -944,7 +881,6 @@ static int restore_syscall_table(void)
         addr = (unsigned long) syscall_table;
         ret = fixed_set_memory_ro(PAGE_ALIGN(addr) - PAGE_SIZE, 1);
         __flush_tlb_all();
-        //printk(KERN_INFO "sys_brk was restored\n");
     }
 
     return 0;
@@ -965,19 +901,13 @@ static int init_syscall_table(void)
     if (!fixed_set_memory_rw)
     {
         printk(KERN_INFO "unable to find set_memory_rw symbol\n");
-        //return ;
     }
 
     fixed_set_memory_ro = (void *) kallsyms_lookup_name("set_memory_ro");
     if (!fixed_set_memory_ro)
     {
         printk(KERN_INFO "unable to find set_memory_ro symbol\n");
-        //return ;
     }
-
-
-
-    //replace_table(__BN_read);
     last_syslist = 0;
     syscall_task.status = 1;
 
@@ -1000,16 +930,12 @@ static int init_cl_char_device(void)
         return majorNumber;
     }
 
-    //printk(KERN_INFO "CL registered with major number:%d\n", majorNumber);
-
     clcharClass = class_create(THIS_MODULE, CLASS_NAME);
     if (IS_ERR(clcharClass)){                // Check for error and clean up if there is
         unregister_chrdev(majorNumber, DEVICE_NAME);
         printk(KERN_INFO "Failed to register device class\n");
         return PTR_ERR(clcharClass);          // Correct way to return an error on a pointer
     }
-
-    //printk(KERN_INFO "CL: device class registered correctly\n");
 
     // Register the device driver
     clcharDevice = device_create(clcharClass, NULL, MKDEV(majorNumber, 0), NULL, DEVICE_NAME);
@@ -1019,7 +945,6 @@ static int init_cl_char_device(void)
         printk(KERN_ALERT "Failed to create the device\n");
         return PTR_ERR(clcharDevice);
     }
-    //printk(KERN_INFO "CL: device class created correctly\n"); // Made it! device was initialized
     pidFlag = 0;
 
     printk(KERN_INFO "init_cl_char_device done\n");
@@ -1062,7 +987,6 @@ static int exit_worker_thread(void)
 
 static int __init cl_km_init(void)
 {
-    //init_trivial();
     init_syscall_table();
     init_cl_char_device();
     init_worker_thread();
@@ -1072,7 +996,6 @@ static int __init cl_km_init(void)
 
 static void __exit cl_km_exit(void)
 {
-    //exit_trivial();
     restore_syscall_table();
     exit_cl_char_device();
     exit_worker_thread();
@@ -1097,8 +1020,6 @@ static ssize_t dev_write(struct file *filep, const char __user *buffer, size_t l
     syslist = *(unsigned long*)(buf + sizeof(pid_t));
 
 
-    //printk(KERN_INFO "result = %ld  pid = %ld\n", result, pid);
-    //printk("input str:%s\n", buffer);
     if (pid >= 0){
         //replace syscall_table 
         restore_syscall_table();
