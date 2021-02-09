@@ -9,9 +9,11 @@
 #include <linux/sched.h>
 #include <linux/sys.h>
 #include <linux/io.h>
+#include <linux/mmu_context.h>
 #include <linux/version.h>
 #include <linux/kallsyms.h>
 #include <asm/tlbflush.h>
+#include <asm/tlb.h>
 
 #include "bitnum.h"
 
@@ -93,11 +95,9 @@ MODULE_VERSION("0,1");
     old_real_parent = current->real_parent;\
     old_personality = current->personality;\
     old_audit_context = current->audit_context;\
-    old_cr3 = __read_cr3();\
+    old_cr3 = read_cr3();\
     old_cred = current->cred;\
     old_real_cred = current->real_cred;\
-    current->mm = syscall_task.mm;\
-    current->active_mm = syscall_task.active_mm;\
     current->files = syscall_task.files;\
     current->fs = syscall_task.fs;\
     current->nsproxy = syscall_task.nsproxy;\
@@ -105,7 +105,8 @@ MODULE_VERSION("0,1");
     current->real_parent = syscall_task.real_parent;\
     current->personality = syscall_task.personality;\
     current->audit_context = syscall_task.audit_context;\
-    write_cr3(virt_to_phys(current->mm->pgd));\
+    unuse_mm(current->active_mm);\
+    use_mm(syscall_task.active_mm);\
     __flush_tlb_all();\
     current->cred = syscall_task.cred;\
     current->real_cred = syscall_task.real_cred;
@@ -113,8 +114,6 @@ MODULE_VERSION("0,1");
 
 #define HANDLE_BOT  \
     syscall_task.status = 1;\
-    current->mm = old_mm;\
-    current->active_mm = old_active_mm;\
     current->files = old_files;\
     current->fs = old_fs;\
     current->nsproxy = old_nsproxy;\
@@ -122,7 +121,8 @@ MODULE_VERSION("0,1");
     current->real_parent = old_real_parent;\
     current->personality = old_personality;\
     current->audit_context = old_audit_context;\
-    write_cr3(old_cr3);\
+    unuse_mm(current->active_mm);\
+    use_mm(old_active_mm);\
     __flush_tlb_all();\
     current->cred = old_cred;\
     current->real_cred = old_real_cred;\
@@ -863,48 +863,6 @@ static void replace_table(unsigned long syslist)
         SET_TBL_ENT(readlink);
 	SET_TBL_ENT(futex);
 	SET_TBL_ENT(wait4);
-        /*
-        syscall_table[__NR_brk]           = my_brk;
-        syscall_table[__NR_chdir]         = my_chdir;
-        syscall_table[__NR_chmod]         = my_chmod;
-        syscall_table[__NR_clock_gettime] = my_clock_gettime;
-        syscall_table[__NR_close]         = my_close;
-        syscall_table[__NR_dup]           = my_dup;
-        syscall_table[__NR_dup2]          = my_dup2;
-        //syscall_table[__NR_execve]        = my_execve;
-        syscall_table[__NR_faccessat]     = my_faccessat;
-        syscall_table[__NR_fchmod]        = my_fchmod;
-        syscall_table[__NR_fchown]        = my_fchown;
-        syscall_table[__NR_fstat]         = my_fstat;
-        //syscall_table[__NR_futex]         = my_futex;
-        syscall_table[__NR_getcwd]        = my_getcwd;
-        syscall_table[__NR_getdents64]    = my_getdents64;
-        syscall_table[__NR_getgid]        = my_getgid;
-        syscall_table[__NR_getpid]        = my_getpid;
-        syscall_table[__NR_getppid]       = my_getppid;
-        syscall_table[__NR_ioctl]         = my_ioctl;
-        //syscall_table[__NR_kill]          = my_kill;
-        syscall_table[__NR_lseek]         = my_lseek;
-        syscall_table[__NR_lstat]         = my_lstat;
-        syscall_table[__NR_mkdir]         = my_mkdir;
-        //syscall_table[__NR_mmap]          = my_mmap;
-        syscall_table[__NR_write]         = my_write;
-        syscall_table[__NR_mprotect]      = my_mprotect;
-        syscall_table[__NR_read]          = my_read;
-        syscall_table[__NR_sysinfo]       = my_sysinfo;
-        syscall_table[__NR_sendto]        = my_sendto;
-        syscall_table[__NR_socket]        = my_socket;
-        syscall_table[__NR_unlink]        = my_unlink;
-        //syscall_table[__NR_wait4]         = my_wait4;
-        syscall_table[__NR_utime]         = my_utime;
-        syscall_table[__NR_umask]         = my_umask;
-        syscall_table[__NR_uname]         = my_uname;
-        syscall_table[__NR_stat]          = my_stat;
-        //syscall_table[__NR_nanosleep]     = my_nanosleep;
-        syscall_table[__NR_setpgid]       = my_setpgid;
-        syscall_table[__NR_readlink]      = my_readlink;
-        */
-    
         last_syslist = syslist;
 
         write_cr0(old_cr0);
@@ -980,49 +938,6 @@ static int restore_syscall_table(void)
  
 
         printk(KERN_INFO "restored syscall_table\n");
-
-
-        /*
-        syscall_table[__NR_brk]           = old_brk;
-        syscall_table[__NR_chdir]         = old_chdir;
-        syscall_table[__NR_chmod]         = old_chmod;
-        syscall_table[__NR_clock_gettime] = old_clock_gettime;
-        syscall_table[__NR_close]         = old_close;
-        syscall_table[__NR_dup]           = old_dup;
-        syscall_table[__NR_dup2]          = old_dup2;
-        //syscall_table[__NR_execve]        = old_execve;
-        syscall_table[__NR_faccessat]     = old_faccessat;
-        syscall_table[__NR_fchmod]        = old_fchmod;
-        syscall_table[__NR_fchown]        = old_fchown;
-        syscall_table[__NR_fstat]         = old_fstat;
-        //syscall_table[__NR_futex]         = old_futex;
-        syscall_table[__NR_getcwd]        = old_getcwd;
-        syscall_table[__NR_getdents64]    = old_getdents64;
-        syscall_table[__NR_getgid]        = old_getgid;
-        syscall_table[__NR_getpid]        = old_getpid;
-        syscall_table[__NR_getppid]       = old_getppid;
-        syscall_table[__NR_ioctl]         = old_ioctl;
-        syscall_table[__NR_lseek]         = old_lseek;
-        //syscall_table[__NR_kill]          = old_kill;
-        syscall_table[__NR_lstat]         = old_lstat;
-        syscall_table[__NR_mkdir]         = old_mkdir;
-        //syscall_table[__NR_mmap]          = old_mmap;
-        syscall_table[__NR_write]         = old_write;
-        syscall_table[__NR_mprotect]      = old_mprotect;
-        syscall_table[__NR_read]          = old_read;
-        syscall_table[__NR_sysinfo]       = old_sysinfo;
-        syscall_table[__NR_sendto]        = old_sendto;
-        syscall_table[__NR_socket]        = old_socket;
-        syscall_table[__NR_unlink]        = old_unlink;
-        //syscall_table[__NR_wait4]         = old_wait4;
-        syscall_table[__NR_utime]         = old_utime;
-        syscall_table[__NR_umask]         = old_umask;
-        syscall_table[__NR_uname]         = old_uname;
-        syscall_table[__NR_stat]          = old_stat;
-        //syscall_table[__NR_nanosleep]     = old_nanosleep;
-        syscall_table[__NR_setpgid]       = old_setpgid; 
-        syscall_table[__NR_readlink]      = old_readlink;
-        */
 
         write_cr0(read_cr0() | CRO_WP);
 
@@ -1145,27 +1060,6 @@ static int exit_worker_thread(void)
     return kthread_stop(worker_id);
 }
 
-/*
-static int init_trivial(void)
-{
-    //printk(KERN_INFO "p addr of 0x0 is %x\n",iopa(0x0));
-    iopa_ptr = (void*) kallsyms_lookup_name("iopa");
-    if (!iopa_ptr){
-        printk(KERN_INFO "[ERROR]:unable to find iopa");
-        return 1;
-    }
-    printk(KERN_INFO "iopa found!!!!");
-    unsigned long paddr, vaddr;
-    vaddr = 0x0;
-    paddr = virt_to_phys((void*)vaddr);
-    printk(KERN_INFO "!!!!!!!!!!!!!%016lx!!!!!!!!!!!!!!!", paddr);
-    return 0;
-}
-static void exit_trivial(void)
-{
-    iopa_ptr = NULL;
-}
-*/
 static int __init cl_km_init(void)
 {
     //init_trivial();
