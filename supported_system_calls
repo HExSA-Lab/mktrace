@@ -28,7 +28,8 @@ kill		    -
 lseek		    done
 lstat		    done
 mkdir		    done
-mmap		    ?			    current->cred is const
+mmap		    done // current->cred is const
+munmap		    done 
 mprotect	    done
 mremap
 munmap

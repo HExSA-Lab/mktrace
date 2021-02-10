@@ -71,12 +71,6 @@ MODULE_VERSION("0,1");
     return result;\
 })
 
-/*
- * TODO: better way to assign rcu structures 
- *       rcu_assign_pointer causes cpu stalls
- *       current assignments of task structs
- *       might cause race conditions once we go parallel
-*/
 #define HANDLE_UP   \
     struct mm_struct* old_mm;\
     struct mm_struct* old_active_mm;\
@@ -88,8 +82,8 @@ MODULE_VERSION("0,1");
     unsigned int old_personality;\
     struct audit_context* old_audit_context;\
     unsigned long old_cr3;\
-    struct cred __rcu* old_cred;\
-    struct cred __rcu* old_real_cred;\
+    const struct cred __rcu* old_cred;\
+    const struct cred __rcu* old_real_cred;\
     old_mm = current->mm;\
     old_active_mm = current->active_mm;\
     old_files = current->files;\
@@ -107,11 +101,12 @@ MODULE_VERSION("0,1");
     current->fs = syscall_task.fs;\
     current->nsproxy = syscall_task.nsproxy;\
     current->group_leader = syscall_task.group_leader;\
-    current->real_parent = syscall_task.real_parent;\
+    rcu_assign_pointer(current->real_parent, syscall_task.real_parent);\
+    rcu_assign_pointer(current->cred, syscall_task.cred);\
+    rcu_assign_pointer(current->real_cred, syscall_task.real_cred);\
     current->personality = syscall_task.personality;\
     current->audit_context = syscall_task.audit_context;\
-    current->cred = syscall_task.cred;\
-    current->real_cred = syscall_task.real_cred;\
+    atomic_inc(&current->active_mm->mm_count);  /*Hack To avoid mmdrop in use_mm*/ \
     task_unlock(current);\
     unuse_mm(current->active_mm);\
     use_mm(syscall_task.active_mm);\
@@ -125,12 +120,13 @@ MODULE_VERSION("0,1");
     current->fs = old_fs;\
     current->nsproxy = old_nsproxy;\
     current->group_leader = old_group_leader;\
-    current->real_parent = old_real_parent;\
+    rcu_assign_pointer(current->real_parent, old_real_parent);\
+    rcu_assign_pointer(current->cred, old_cred);\
+    rcu_assign_pointer(current->real_cred, old_real_cred);\
     current->personality = old_personality;\
     current->audit_context = old_audit_context;\
-    current->cred = old_cred;\
-    current->real_cred = old_real_cred;\
     task_unlock(current);\
+    atomic_dec(&old_active_mm->mm_count);\
     unuse_mm(current->active_mm);\
     use_mm(old_active_mm);\
     __flush_tlb_all();\
@@ -261,6 +257,7 @@ asmlinkage static long (*old_lseek)(unsigned int, off_t, unsigned int);
 asmlinkage static long (*old_lstat)(const char __user *, struct __old_kernel_stat __user *);
 asmlinkage static long (*old_mkdir)(const char __user *, umode_t);
 asmlinkage static long (*old_mmap)(unsigned long, unsigned long, unsigned long, unsigned long, unsigned long, unsigned long);
+asmlinkage static long (*old_munmap)(unsigned long, unsigned long);
 asmlinkage static long (*old_write)(unsigned int, const char __user *, size_t count);
 asmlinkage static long (*old_mprotect)(unsigned long, size_t, unsigned long);
 asmlinkage static long (*old_read)(unsigned int, char __user *, size_t count);
@@ -299,6 +296,7 @@ static long my_lseek(unsigned int, off_t, unsigned int);
 static long my_lstat(const char __user *, struct __old_kernel_stat __user *);
 static long my_mkdir(const char __user *, umode_t);
 static long my_mmap(unsigned long, unsigned long, unsigned long, unsigned long, unsigned long, unsigned long);
+static long my_munmap(unsigned long, unsigned long);
 static long my_write(unsigned int, const char __user *, size_t);
 static long my_mprotect(unsigned long, size_t, unsigned long);
 static long my_read(unsigned int, char __user *, size_t);
@@ -474,6 +472,10 @@ static int worker(void* data){
                 case __NR_mmap:
                     {
                         HANDLE_CALL6(old_mmap, unsigned long, unsigned long, unsigned long, unsigned long, unsigned long, unsigned long);
+                    }
+                case __NR_munmap:
+                    {
+                        HANDLE_CALL2(old_munmap, unsigned long, unsigned long);
                     }
                 case __NR_write:
                     {
@@ -662,6 +664,10 @@ static long my_mmap(unsigned long addr, unsigned long len, unsigned long prot, u
 {
     syscall_wrapper(__NR_mmap, old_mmap(addr, len, prot, flags, fd, pgoff));
 }
+static long my_munmap(unsigned long addr, unsigned long len)
+{
+    syscall_wrapper(__NR_munmap, old_munmap(addr, len));
+}
 
 static long my_write(unsigned int fd, const char __user *buf, size_t count)
 {
@@ -789,6 +795,7 @@ static void replace_table(unsigned long syslist)
 	    SET_TBL_ENT(futex);
 	    SET_TBL_ENT(wait4);
 	    SET_TBL_ENT(mmap);
+	    SET_TBL_ENT(munmap);
         last_syslist = syslist;
 
         write_cr0(old_cr0);
@@ -860,6 +867,7 @@ static int restore_syscall_table(void)
 	    RESET_TBL_ENT(futex);
 	    RESET_TBL_ENT(wait4);
 	    RESET_TBL_ENT(mmap);
+	    RESET_TBL_ENT(munmap);
  
 
         printk(KERN_INFO "restored syscall_table\n");

@@ -213,6 +213,10 @@ static int get_syslist (unsigned long * slist)
             *slist |= __BN_mmap;
             continue;
         }
+        if (strcmp("munmap", lineBuf) == 0){
+            *slist |= __BN_munmap;
+            continue;
+        }
     }
 
     fclose(fp);
