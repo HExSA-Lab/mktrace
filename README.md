@@ -3,10 +3,11 @@
 
 This tool intercepts selected system calls and delegates them to a kernel thread which then executes the sysem call.
 
-## Prerequisites
+## Supported OS/kernel
 
-* Linux kernel version  3.10.1062
-  kernel headers
+* centos 7
+* Linux kernel version 3.10.1062
+* kernel headers
 
 ## Building
 
