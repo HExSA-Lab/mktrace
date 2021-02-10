@@ -1,4 +1,4 @@
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
 # mktrace 
 
 This tool intercepts selected system calls and delegates them to a kernel thread which then executes the sysem call.
