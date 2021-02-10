@@ -21,7 +21,7 @@
 #define DEVICE_NAME "cl_sf"
 #define CLASS_NAME  "cl"
 
-MODULE_AUTHOR("Conghao Liu <cliu115@hawk.iit.edu>");
+MODULE_AUTHOR("Conghao Liu <cliu115@hawk.iit.edu>, Brian Richard Tauro <btauro@hawk.iit.edu>");
 MODULE_DESCRIPTION("Syscall proxy daemon");
 MODULE_LICENSE("GPL");
 MODULE_VERSION("0,1");
@@ -72,6 +72,10 @@ MODULE_VERSION("0,1");
 })
 
 /*
+ * TODO: better way to assign rcu structures 
+ *       rcu_assign_pointer causes cpu stalls
+ *       current assignments of task structs
+ *       might cause race conditions once we go parallel
 */
 #define HANDLE_UP   \
     struct mm_struct* old_mm;\
@@ -269,7 +273,6 @@ asmlinkage static long (*old_utime)(char __user*, struct utimbuf __user*);
 asmlinkage static long (*old_umask)(int);
 asmlinkage static long (*old_uname)(struct old_utsname __user*);
 asmlinkage static long (*old_stat)(const char __user *, struct __old_kernel_stat __user *);
-asmlinkage static long (*old_nanosleep)(const struct timespec __user*, struct timespec __user*);
 asmlinkage static long (*old_setpgid)(pid_t, pid_t);
 asmlinkage static long (*old_readlink)(const char __user*, char __user*, int);
 
@@ -292,7 +295,6 @@ static long my_getgid(void);
 static long my_getpid(void);
 static long my_getppid(void);
 static long my_ioctl(unsigned int, unsigned int, unsigned long);
-static long my_kill(pid_t, int);
 static long my_lseek(unsigned int, off_t, unsigned int);
 static long my_lstat(const char __user *, struct __old_kernel_stat __user *);
 static long my_mkdir(const char __user *, umode_t);
@@ -309,7 +311,6 @@ static long my_utime(char __user*, struct utimbuf __user*);
 static long my_umask(int);
 static long my_uname(struct old_utsname __user*);
 static long my_stat(const char __user *, struct __old_kernel_stat __user *);
-static long my_nanosleep(const struct timespec*, struct timespec*);
 static long my_setpgid(pid_t, pid_t);
 static long my_readlink(const char __user*, char __user*, int);
 
@@ -330,8 +331,8 @@ static struct syscall_args{
     struct mm_struct* active_mm;
     struct files_struct* files;
     struct fs_struct* fs;
-    struct cred __rcu* cred;
-    struct cred __rcu* real_cred;
+    const struct cred __rcu* cred;
+    const struct cred __rcu* real_cred;
     struct nsproxy* nsproxy;
     struct task_struct* group_leader;
     struct task_struct __rcu *real_parent;
@@ -427,7 +428,7 @@ static int worker(void* data){
                     }
                 case __NR_futex:
                     {
-                        HANDLE_CALL6(old_futex, u32*, int, u32, const struct timespec*, u32*, u32);
+                        HANDLE_CALL6(old_futex, u32*, int, u32, struct timespec*, u32*, u32);
                     }
                 case __NR_getcwd:
                     {
@@ -521,10 +522,6 @@ static int worker(void* data){
                 case __NR_stat:
                     {
                         HANDLE_CALL2(old_stat, const char __user *, struct __old_kernel_stat __user*);
-                    }
-                case __NR_nanosleep:
-                    {
-                        HANDLE_CALL2(old_nanosleep, const struct timespec __user*, struct timespec __user*);
                     }
                 case __NR_setpgid:
                     {
@@ -646,11 +643,6 @@ static long my_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
     syscall_wrapper(__NR_ioctl, old_ioctl(fd, cmd, arg));
 }
 
-static long my_kill(pid_t pid, int sig)
-{
-    syscall_wrapper(__NR_kill, old_kill(pid, sig));
-}
-
 static long my_lseek(unsigned int fd, off_t offset, unsigned int whence)
 {
     syscall_wrapper(__NR_lseek, old_lseek(fd, offset, whence));
@@ -731,11 +723,6 @@ static long my_stat(const char __user* filename, struct __old_kernel_stat __user
     syscall_wrapper(__NR_stat, old_stat(filename, statbuf));
 }
 
-static long my_nanosleep(const struct timespec __user* reg, struct timespec __user* rem)
-{
-    syscall_wrapper(__NR_nanosleep, old_nanosleep(reg, rem));
-}
-
 static long my_setpgid(pid_t pid, pid_t pgid)
 {
     syscall_wrapper(__NR_setpgid, old_setpgid(pid, pgid));
@@ -766,7 +753,6 @@ static void replace_table(unsigned long syslist)
             printk(KERN_INFO "unable to set the memory rw at %16lX\n", PAGE_ALIGN(addr) - PAGE_SIZE);
             return ;
         }
-
         SET_TBL_ENT(brk);
         SET_TBL_ENT(chdir);
         SET_TBL_ENT(chmod);
@@ -800,8 +786,9 @@ static void replace_table(unsigned long syslist)
         SET_TBL_ENT(stat);
         SET_TBL_ENT(setpgid);
         SET_TBL_ENT(readlink);
-	SET_TBL_ENT(futex);
-	SET_TBL_ENT(wait4);
+	    SET_TBL_ENT(futex);
+	    SET_TBL_ENT(wait4);
+	    SET_TBL_ENT(mmap);
         last_syslist = syslist;
 
         write_cr0(old_cr0);
@@ -870,8 +857,9 @@ static int restore_syscall_table(void)
         RESET_TBL_ENT(stat);
         RESET_TBL_ENT(setpgid);
         RESET_TBL_ENT(readlink);
-	RESET_TBL_ENT(futex);
-	RESET_TBL_ENT(wait4);
+	    RESET_TBL_ENT(futex);
+	    RESET_TBL_ENT(wait4);
+	    RESET_TBL_ENT(mmap);
  
 
         printk(KERN_INFO "restored syscall_table\n");
