@@ -21,7 +21,7 @@ $ sudo insmod mktraced.ko //insert kernel module
 ```
 $ ./mktrace <application>
 
-Usage: sudo ./mktrace <application>
+Usage: ./mktrace <application>
 
 ```
 
