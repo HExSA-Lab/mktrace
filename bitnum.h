@@ -38,4 +38,5 @@
 #define __BN_utime          (1UL << 53)
 #define __BN_wait4          (1UL << 55)
 #define __BN_write          (1UL << 56)
+#define __BN_mmap          (1UL << 57)
 #endif
