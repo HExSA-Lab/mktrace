@@ -209,6 +209,10 @@ static int get_syslist (unsigned long * slist)
             *slist |= __BN_write;
             continue;
         }
+        if (strcmp("mmap", lineBuf) == 0){
+            *slist |= __BN_mmap;
+            continue;
+        }
     }
 
     fclose(fp);
