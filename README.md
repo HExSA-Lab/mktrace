@@ -1,6 +1,6 @@
 
 # mktrace 
-mktrace is a system call delegation tool built for Linux which is designed to emulate system call forwaring, a technique used in multi kernels like Intel mOS, IHK/ Mckernel, etc to delegate unsupported system calls to Linux.
+mktrace is a system call delegation tool built for Linux which is designed to emulate system call forwaring, a technique used in multi kernels (Intel mOS, IHK/ Mckernel) to delegate unsupported system calls to Linux.
 
 This tool intercepts selected system calls and delegates them to a kernel thread which then executes the system call.
 
