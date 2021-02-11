@@ -10,7 +10,7 @@ execve		    skip
 faccessat	    done
 fchmod		    done
 fchown		    done		
-fcntl		    ?
+fcntl		    done 
 fstat		    done
 futex		    done
 getcwd		    done
@@ -32,7 +32,7 @@ mmap		    done // current->cred is const
 munmap		    done 
 mprotect	    done
 mremap
-munmap
+munmap          done
 nanosleep	    skip			glibc 
 pipe		
 poll		    skip			current->restart_block is not a pointer
@@ -56,3 +56,5 @@ utime		    done
 vfork		    skip			no way to copy the caller process
 wait4		    done			rmmod causes error
 write		    done
+access          done
+open            done

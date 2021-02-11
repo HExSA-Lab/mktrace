@@ -39,3 +39,6 @@ The input file format for mktrace\_pf is as follows:
 write
 brk
 ```
+### Limitations 
+
+    Any system call which tries to modify the task struct such as arch_prctl, execve, etc are currently not supported by design. For more information on which system calls are supported by mktrace checkout supported_system_calls file.

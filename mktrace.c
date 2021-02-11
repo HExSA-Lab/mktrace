@@ -217,6 +217,18 @@ static int get_syslist (unsigned long * slist)
             *slist |= __BN_munmap;
             continue;
         }
+        if (strcmp("access", lineBuf) == 0){
+            *slist |= __BN_access;
+            continue;
+        }
+        if (strcmp("open", lineBuf) == 0){
+            *slist |= __BN_open;
+            continue;
+        }
+        if (strcmp("fcntl", lineBuf) == 0){
+            *slist |= __BN_fcntl;
+            continue;
+        }
     }
 
     fclose(fp);

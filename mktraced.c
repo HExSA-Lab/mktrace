@@ -245,6 +245,7 @@ asmlinkage static long (*old_faccessat)(int, const char __user*, int);
 asmlinkage static long (*old_fchmod)(int, mode_t);
 asmlinkage static long (*old_fchown)(unsigned int, uid_t, gid_t);
 asmlinkage static long (*old_fstat)(unsigned int, struct __old_kernel_stat __user*);
+asmlinkage static long (*old_fcntl)(int, int, unsigned long);
 asmlinkage static long (*old_futex)(u32 __user*, int, u32, struct timespec __user*, u32 __user*, u32);
 asmlinkage static long (*old_getcwd)(char __user*, unsigned long);
 asmlinkage static long (*old_getdents64)(unsigned int, struct linux_dirent64 __user *, unsigned int);
@@ -259,6 +260,8 @@ asmlinkage static long (*old_mkdir)(const char __user *, umode_t);
 asmlinkage static long (*old_mmap)(unsigned long, unsigned long, unsigned long, unsigned long, unsigned long, unsigned long);
 asmlinkage static long (*old_munmap)(unsigned long, unsigned long);
 asmlinkage static long (*old_write)(unsigned int, const char __user *, size_t count);
+asmlinkage static long (*old_open)( const char __user *, int, mode_t);
+asmlinkage static long (*old_access)(const char __user *, int);
 asmlinkage static long (*old_mprotect)(unsigned long, size_t, unsigned long);
 asmlinkage static long (*old_read)(unsigned int, char __user *, size_t count);
 asmlinkage static long (*old_sysinfo)(struct sysinfo __user *);
@@ -285,6 +288,7 @@ static long my_faccessat(int, const char __user*, int);
 static long my_fchmod(int, mode_t);
 static long my_fchown(unsigned int, uid_t, gid_t);
 static long my_fstat(unsigned int, struct __old_kernel_stat __user*);
+static long my_fcntl(int, int, unsigned long);
 static long my_futex(u32 __user*, int, u32, struct timespec __user*, u32 __user*, u32);
 static long my_getcwd(char __user*, unsigned long);
 static long my_getdents64(unsigned int, struct linux_dirent64 __user *, unsigned int);
@@ -298,6 +302,8 @@ static long my_mkdir(const char __user *, umode_t);
 static long my_mmap(unsigned long, unsigned long, unsigned long, unsigned long, unsigned long, unsigned long);
 static long my_munmap(unsigned long, unsigned long);
 static long my_write(unsigned int, const char __user *, size_t);
+static long my_open( const char __user * pathname , int flags , mode_t mode);
+static long my_access( const char __user * pathname , int mode);
 static long my_mprotect(unsigned long, size_t, unsigned long);
 static long my_read(unsigned int, char __user *, size_t);
 static long my_sysinfo(struct sysinfo __user *);
@@ -424,6 +430,10 @@ static int worker(void* data){
                     {
                         HANDLE_CALL2(old_fstat, int, struct __old_kernel_stat*);
                     }
+                case __NR_fcntl:
+                    {
+                        HANDLE_CALL3(old_fcntl, int, int, unsigned long);
+                    }
                 case __NR_futex:
                     {
                         HANDLE_CALL6(old_futex, u32*, int, u32, struct timespec*, u32*, u32);
@@ -480,6 +490,14 @@ static int worker(void* data){
                 case __NR_write:
                     {
                         HANDLE_CALL3(old_write, unsigned int, char*, size_t);
+                    }
+                case __NR_open:
+                    {
+                        HANDLE_CALL3(old_open, char*, int, mode_t);
+                    }
+                case __NR_access:
+                    {
+                        HANDLE_CALL2(old_access, char*, int);
                     }
                 case __NR_mprotect:
                     {
@@ -610,6 +628,11 @@ static long my_fstat(unsigned int fd, struct __old_kernel_stat __user* buf)
     syscall_wrapper(__NR_fstat, old_fstat(fd, buf));
 }
 
+static long my_fcntl(int fd, int cmd, unsigned long arg)
+{
+    syscall_wrapper(__NR_fcntl, old_fcntl(fd, cmd, arg));
+}
+
 static long my_futex(u32 __user* uaddr, int op, u32 val, struct timespec __user *utime, u32 __user *uaddr2, u32 val3)
 {
     syscall_wrapper(__NR_futex, old_futex(uaddr, op, val, utime, uaddr2, val3));
@@ -674,6 +697,16 @@ static long my_write(unsigned int fd, const char __user *buf, size_t count)
     syscall_wrapper(__NR_write, old_write(fd, buf, count));
 }
 
+static long my_access(const char __user * pathname, int mode)
+{
+    syscall_wrapper(__NR_access, old_access(pathname, mode));
+}
+
+static long my_open( const char __user * pathname , int flags , mode_t mode)
+{
+    syscall_wrapper(__NR_open, old_open(pathname, flags, mode));
+}
+
 static long my_mprotect(unsigned long start, size_t len, unsigned long prot)
 {
     syscall_wrapper(__NR_mprotect, old_mprotect(start, len, prot));
@@ -706,7 +739,7 @@ static long my_unlink(const char __user *pathname)
 
 static long my_wait4(pid_t upid, int __user * stat_addr, int options, struct rusage __user* ru)
 {
-    syscall_wrapper(__NR_wait4, old_wait4(upid, stat_addr, options, ru));
+    syscall_wrapper(__NR_wait4, old_wait4(upid, stat_addr, options, ru)); 
 }
 
 static long my_utime(char __user *filename, struct utimbuf __user *times)
@@ -796,6 +829,9 @@ static void replace_table(unsigned long syslist)
 	    SET_TBL_ENT(wait4);
 	    SET_TBL_ENT(mmap);
 	    SET_TBL_ENT(munmap);
+	    SET_TBL_ENT(open);
+	    SET_TBL_ENT(access);
+	    SET_TBL_ENT(fcntl);
         last_syslist = syslist;
 
         write_cr0(old_cr0);
@@ -868,6 +904,9 @@ static int restore_syscall_table(void)
 	    RESET_TBL_ENT(wait4);
 	    RESET_TBL_ENT(mmap);
 	    RESET_TBL_ENT(munmap);
+	    RESET_TBL_ENT(open);
+	    RESET_TBL_ENT(access);
+	    RESET_TBL_ENT(fcntl);
  
 
         printk(KERN_INFO "restored syscall_table\n");
