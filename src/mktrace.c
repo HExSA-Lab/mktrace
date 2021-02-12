@@ -10,7 +10,7 @@
 #include <strings.h>
 #include <string.h>
 
-#include "bitnum.h"
+#include "../include/bitnum.h"
 
 
 // TODO: use optparse
