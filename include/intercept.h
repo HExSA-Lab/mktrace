@@ -52,8 +52,10 @@ extern pid_t          targetPid;
         syscall_task.cred = current->cred;\
         syscall_task.real_cred = current->real_cred;\
         syscall_task.status = 0;\
-        while(!syscall_task.status) wake_up_process(worker_id);\
-        result = syscall_task.ret;\
+	wmb();\
+        wake_up_all(&wait_queue_delegate);\
+    	wait_event_interruptible(wait_queue_delegate, syscall_task.status == 1);\
+	result = syscall_task.ret;\
    }\
     else{\
         result = old_call;\

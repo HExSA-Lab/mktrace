@@ -44,7 +44,6 @@
 
 
 #define HANDLE_BOT  \
-    syscall_task.status = 1;\
     task_lock(current);\
     current->files = old_files;\
     current->fs = old_fs;\
@@ -59,7 +58,9 @@
     atomic_dec(&old_active_mm->mm_count);\
     unuse_mm(current->active_mm);\
     use_mm(old_active_mm);\
+    syscall_task.status = 1;\
     __flush_tlb_all();\
+    wmb();\
     break;
 
 #define HANDLE_CALL0(CALL_NAME)\

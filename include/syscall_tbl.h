@@ -1,5 +1,8 @@
 #ifndef __STBL_H__
 #define __STBL_H__
+#include <linux/wait.h> 
+#include <linux/spinlock.h> 
+#include <linux/semaphore.h>
 #define CRO_WP 0x00010000
 #define SET_TBL_ENT(sysname)\
 ({\
@@ -50,7 +53,8 @@ struct syscall_args{
     struct audit_context* audit_context;
     //struct sighand_struct* sighand;
     //struct signal_struct* signal;
-
 };
 extern struct syscall_args syscall_task;
+//Initialize wait queue
+extern wait_queue_head_t wait_queue_delegate;
 #endif

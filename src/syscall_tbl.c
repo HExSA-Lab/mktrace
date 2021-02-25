@@ -28,6 +28,7 @@ unsigned long  last_syslist;         //everytime dev_write is invoked,
                                             //syscall_table needs to be 
                                             //restored based on this value
 struct syscall_args syscall_task;
+struct semaphore mr_sem;
 
 asmlinkage  long (*old_brk)(unsigned long);
 asmlinkage  long (*old_chdir)(const char __user*);

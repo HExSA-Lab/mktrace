@@ -9,8 +9,12 @@ MODULE_DESCRIPTION("Syscall delegation");
 MODULE_LICENSE("GPL");
 MODULE_VERSION("0,1");
 
+wait_queue_head_t wait_queue_delegate;
+
 static int __init cl_km_init(void)
 {
+    //Initialize wait queue
+    init_waitqueue_head(&wait_queue_delegate);
     init_syscall_table();
     init_cl_char_device();
     init_worker_thread();
