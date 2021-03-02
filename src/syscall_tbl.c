@@ -245,7 +245,7 @@ int init_syscall_table(void)
         printk(KERN_INFO "unable to find set_memory_ro symbol\n");
     }
     last_syslist = 0;
-    syscall_task.status = 1;
+    syscall_task.status = PAUSE_DELEGATEE;
 
     printk(KERN_INFO "init_syscall_table done\n");
     return 0;

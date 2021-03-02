@@ -20,20 +20,16 @@
 #include "../include/syscall_tbl.h"
 
 struct task_struct* worker_id;
+struct completion comp;
+DECLARE_COMPLETION(comp);
 
 int worker(void* data){
 	printk("worker launched\n");
-	while(1)
+	while(!kthread_should_stop())
 	{
 		wait_event_interruptible(wait_queue_delegate, 
-			    syscall_task.status != 1);
-		if (syscall_task.status == 2){
-			if (kthread_should_stop()){
-				printk(KERN_INFO "worker thread returns\n");
-				return 0;
-			}
-		}
-		if (syscall_task.status == 0){
+			    syscall_task.status != PAUSE_DELEGATEE);
+		if (syscall_task.status == START_DELEGATEE){
 			switch(syscall_task.call_num)
 			{
 
@@ -210,6 +206,7 @@ int worker(void* data){
 		}
         	wake_up_all(&wait_queue_delegate);
 	}	
+    complete(&comp);
 	return 0;
 }
 
@@ -238,9 +235,11 @@ int init_worker_thread(void)
 int exit_worker_thread(void)
 {
     syscall_task.status = 2;
-    wmb();
+    
     kthread_stop(worker_id);
+
     wake_up_all(&wait_queue_delegate);
+    wait_for_completion(&comp);
     return 0;
 }
 

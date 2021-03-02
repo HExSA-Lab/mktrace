@@ -58,7 +58,7 @@
     atomic_dec(&old_active_mm->mm_count);\
     unuse_mm(current->active_mm);\
     use_mm(old_active_mm);\
-    syscall_task.status = 1;\
+    syscall_task.status = PAUSE_DELEGATEE;\
     __flush_tlb_all();\
     wmb();\
     break;

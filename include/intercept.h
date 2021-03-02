@@ -51,10 +51,10 @@ extern pid_t          targetPid;
         syscall_task.audit_context = current->audit_context;\
         syscall_task.cred = current->cred;\
         syscall_task.real_cred = current->real_cred;\
-        syscall_task.status = 0;\
+        syscall_task.status = START_DELEGATEE;\
 	wmb();\
         wake_up_all(&wait_queue_delegate);\
-    	wait_event_interruptible(wait_queue_delegate, syscall_task.status == 1);\
+    	wait_event_interruptible(wait_queue_delegate, syscall_task.status == PAUSE_DELEGATEE);\
 	result = syscall_task.ret;\
    }\
     else{\

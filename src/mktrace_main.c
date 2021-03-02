@@ -24,9 +24,11 @@ static int __init cl_km_init(void)
 
 static void __exit cl_km_exit(void)
 {
+    preempt_disable();
     restore_syscall_table();
     exit_cl_char_device();
     exit_worker_thread();
+    preempt_enable();
     printk(KERN_INFO "cl_km_exit done");
 }
 

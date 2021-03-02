@@ -23,7 +23,7 @@ install:
 	@sudo cp mktrace /usr/bin/
 
 clean:
-	@rm -f *.o *.ko mktrace
+	@rm -f src/*.o *.ko mktrace
 	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
 
 .PHONY: clean ins rm install
