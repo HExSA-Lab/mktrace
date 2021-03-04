@@ -51,6 +51,7 @@ struct syscall_args{
     struct task_struct __rcu *real_parent;
     unsigned int personality;
     struct audit_context* audit_context;
+    spinlock_t table_lock;
     //struct sighand_struct* sighand;
     //struct signal_struct* signal;
 };

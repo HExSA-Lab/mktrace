@@ -71,7 +71,6 @@ int exit_cl_char_device(void)
     class_unregister(clcharClass);                          // unregister the device class
     class_destroy(clcharClass);                             // remove the device class
     unregister_chrdev(majorNumber, DEVICE_NAME);             // unregister the major number
-    printk(KERN_INFO "CL: Goodbye from the LKM!\n");
     return 0;
 }
 /* 

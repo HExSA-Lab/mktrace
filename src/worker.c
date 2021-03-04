@@ -21,14 +21,20 @@
 
 struct task_struct* worker_id;
 struct completion comp;
-DECLARE_COMPLETION(comp);
 
 int worker(void* data){
 	printk("worker launched\n");
 	while(!kthread_should_stop())
 	{
-		wait_event_interruptible(wait_queue_delegate, 
-			    syscall_task.status != PAUSE_DELEGATEE);
+        spin_lock(&syscall_task.table_lock);
+		wait_event_cmd(wait_queue_delegate, 
+			    syscall_task.status != PAUSE_DELEGATEE,
+                spin_unlock(&syscall_task.table_lock),
+                spin_lock(&syscall_task.table_lock));
+
+        if (!spin_is_locked(&syscall_task.table_lock))
+                spin_lock(&syscall_task.table_lock);
+
 		if (syscall_task.status == START_DELEGATEE){
 			switch(syscall_task.call_num)
 			{
@@ -204,9 +210,10 @@ int worker(void* data){
 					}
 			}
 		}
+            spin_unlock(&syscall_task.table_lock);
         	wake_up_all(&wait_queue_delegate);
 	}	
-    complete(&comp);
+    complete_and_exit(&comp, 0);
 	return 0;
 }
 
@@ -217,10 +224,13 @@ int init_worker_thread(void)
      * this function create & launch a kernel worker thread to perform syscalls
      * for process $targetPid
      */
-    char worker_name[16] = "CL_worker";
+    char worker_name[10] = "CL_worker";
+    int get_cpu = -1;
+    init_completion(&comp);
     //create worker thread
-    printk(KERN_INFO "create worker thread\n");
+    get_cpu = smp_processor_id();
     worker_id = kthread_create(worker, NULL, worker_name);
+    kthread_bind(worker_id, get_cpu);
     if ((worker_id))
     {
         printk(KERN_INFO "worker thread created");
@@ -234,7 +244,9 @@ int init_worker_thread(void)
 
 int exit_worker_thread(void)
 {
+    spin_lock(&syscall_task.table_lock);
     syscall_task.status = 2;
+    spin_unlock(&syscall_task.table_lock);
     
     kthread_stop(worker_id);
 

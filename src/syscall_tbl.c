@@ -74,6 +74,7 @@ asmlinkage  long (*old_readlink)(const char __user*, char __user*, int);
 
 int restore_syscall_table(void)
 {
+    preempt_disable();
     if (syscall_table != NULL)
     {
         int ret;
@@ -92,7 +93,6 @@ int restore_syscall_table(void)
             return 1;
         }
 
-        printk(KERN_INFO "trying to restore syscall_table\n");
         RESET_TBL_ENT(brk);
         RESET_TBL_ENT(chdir);
         RESET_TBL_ENT(chmod);
@@ -133,9 +133,6 @@ int restore_syscall_table(void)
 	    RESET_TBL_ENT(open);
 	    RESET_TBL_ENT(access);
 	    RESET_TBL_ENT(fcntl);
- 
-
-        printk(KERN_INFO "restored syscall_table\n");
 
         write_cr0(read_cr0() | CRO_WP);
 
@@ -144,6 +141,7 @@ int restore_syscall_table(void)
         __flush_tlb_all();
     }
 
+    preempt_enable();
     return 0;
 }
 //this function store the replaced syscall entry into shadow_table
@@ -224,12 +222,11 @@ void replace_table(unsigned long syslist)
 
 int init_syscall_table(void)
 {
+    spin_lock_init(&syscall_task.table_lock);
     /* 
      * this function finds out the mem addr of syscall table,
      * then replace some entries of it with our wrapping function
      */
-
-    printk(KERN_INFO "start to find syscall addr\n");
     syscall_table = (void**) find_syscall_table();
     printk(KERN_INFO "syscall_table addr:0x%p\n", syscall_table);
 
@@ -245,7 +242,9 @@ int init_syscall_table(void)
         printk(KERN_INFO "unable to find set_memory_ro symbol\n");
     }
     last_syslist = 0;
+    spin_lock(&syscall_task.table_lock);
     syscall_task.status = PAUSE_DELEGATEE;
+    spin_unlock(&syscall_task.table_lock);
 
     printk(KERN_INFO "init_syscall_table done\n");
     return 0;

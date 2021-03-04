@@ -34,6 +34,7 @@ extern pid_t          targetPid;
                  :"%rax", "%rdi", "%rsi", "%rdx", "%r10", "%r8", "%r9"\
                  );\
     if (current->pid == targetPid && pidFlag == 1){\
+        spin_lock(&syscall_task.table_lock);\
         syscall_task.arg1 = args.arg1;\
         syscall_task.arg2 = args.arg2;\
         syscall_task.arg3 = args.arg3;\
@@ -52,10 +53,16 @@ extern pid_t          targetPid;
         syscall_task.cred = current->cred;\
         syscall_task.real_cred = current->real_cred;\
         syscall_task.status = START_DELEGATEE;\
+        spin_unlock(&syscall_task.table_lock);\
 	wmb();\
         wake_up_all(&wait_queue_delegate);\
-    	wait_event_interruptible(wait_queue_delegate, syscall_task.status == PAUSE_DELEGATEE);\
-	result = syscall_task.ret;\
+        spin_lock(&syscall_task.table_lock);\
+    	wait_event_cmd(wait_queue_delegate, syscall_task.status == PAUSE_DELEGATEE,\
+                       spin_unlock(&syscall_task.table_lock), spin_lock(&syscall_task.table_lock));\
+        if (!spin_is_locked(&syscall_task.table_lock))\
+                spin_lock(&syscall_task.table_lock);\
+	    result = syscall_task.ret;\
+        spin_unlock(&syscall_task.table_lock);\
    }\
     else{\
         result = old_call;\
